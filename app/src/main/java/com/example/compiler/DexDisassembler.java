@@ -13,9 +13,11 @@ import com.example.util.FileUtils;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 public class DexDisassembler {
 
@@ -24,39 +26,66 @@ public class DexDisassembler {
         public final String smaliCode;
         public final int classCount;
         public final List<File> smaliFiles;
+        public final File zipArchive;
         public final String message;
+        public final List<String> classDescriptors;
 
-        public DisassembleResult(boolean success, String smaliCode, int classCount, List<File> smaliFiles, String message) {
+        public DisassembleResult(boolean success, String smaliCode, int classCount, List<File> smaliFiles,
+                                 File zipArchive, String message, List<String> classDescriptors) {
             this.success = success;
             this.smaliCode = smaliCode;
             this.classCount = classCount;
-            this.smaliFiles = smaliFiles;
+            this.smaliFiles = smaliFiles != null ? smaliFiles : new ArrayList<>();
+            this.zipArchive = zipArchive;
             this.message = message;
+            this.classDescriptors = classDescriptors != null ? classDescriptors : new ArrayList<>();
         }
     }
 
+    /**
+     * Disassembles a real Android classes.dex file into clean Smali assembly using Baksmali.
+     */
     public static DisassembleResult disassemble(Context context, File dexFile) {
         if (dexFile == null || !dexFile.exists() || dexFile.length() == 0) {
-            return new DisassembleResult(false, "", 0, null, "DEX file not found or empty.");
+            return new DisassembleResult(false, "", 0, null, null, "DEX file not found or empty.", null);
         }
 
         try {
-            File outDir = new File(context.getCacheDir(), "baksmali_out_" + System.currentTimeMillis());
+            File parentDir = context != null && context.getCacheDir() != null ?
+                    context.getCacheDir() :
+                    new File(System.getProperty("java.io.tmpdir", "/tmp"));
+
+            File outDir = new File(parentDir, "baksmali_" + System.currentTimeMillis() + "_" + (int)(Math.random() * 1000));
             if (!outDir.exists()) {
                 outDir.mkdirs();
             }
 
+            // Verify DEX magic header
+            byte[] header = new byte[8];
+            try (FileInputStream fis = new FileInputStream(dexFile)) {
+                int read = fis.read(header);
+                if (read < 4 || header[0] != 'd' || header[1] != 'e' || header[2] != 'x' || header[3] != '\n') {
+                    return new DisassembleResult(false, "", 0, null, null,
+                            "Invalid DEX magic bytes. File does not appear to be a valid Android Dalvik executable.", null);
+                }
+            }
+
             DexBackedDexFile dexBacked = DexFileFactory.loadDexFile(dexFile, Opcodes.getDefault());
             int classCount = dexBacked.getClasses().size();
+            List<String> descriptors = new ArrayList<>();
+            for (ClassDef cd : dexBacked.getClasses()) {
+                descriptors.add(cd.getType());
+            }
 
             BaksmaliOptions options = new BaksmaliOptions();
-            options.apiLevel = 26;
+            options.apiLevel = AndroidPlatformManager.DEFAULT_MIN_API;
             options.parameterRegisters = true;
             options.localsDirective = true;
+            options.sequentialLabels = true;
 
             boolean success = Baksmali.disassembleDexFile(dexBacked, outDir, 1, options);
             if (!success) {
-                return new DisassembleResult(false, "", 0, null, "Baksmali failed to disassemble classes.dex");
+                return new DisassembleResult(false, "", 0, null, null, "Baksmali disassembler encountered fatal errors.", descriptors);
             }
 
             List<File> generatedFiles = new ArrayList<>();
@@ -67,30 +96,49 @@ public class DexDisassembler {
                 if (f.getName().endsWith(".smali")) {
                     if (combined.length() > 0) {
                         combined.append("\n# ========================================================\n");
-                        combined.append("# File: ").append(f.getName()).append("\n");
+                        combined.append("# Class: ").append(f.getName()).append("\n");
                         combined.append("# ========================================================\n\n");
                     }
                     combined.append(FileUtils.readFile(f)).append("\n");
                 }
             }
 
-            String msg = "SUCCESS: Disassembled " + classCount + " class(es) into Smali.\nTotal files: " + generatedFiles.size();
-            return new DisassembleResult(true, combined.toString(), classCount, generatedFiles, msg);
+            // Create ZIP archive containing all disassembled Smali files
+            File zipFile = new File(parentDir, "smali_extracted_" + System.currentTimeMillis() + ".zip");
+            createZip(outDir, zipFile);
 
-        } catch (Exception e) {
-            return new DisassembleResult(false, "", 0, null, "Disassembly Exception: " + e.getMessage());
+            StringBuilder summary = new StringBuilder();
+            summary.append("SUCCESS: DEX successfully disassembled with Baksmali.\n")
+                    .append("• Total Classes: ").append(classCount).append("\n")
+                    .append("• Disassembled Files: ").append(generatedFiles.size()).append("\n")
+                    .append("• ZIP Archive: ").append(zipFile.getName()).append("\n\n")
+                    .append("Class Descriptors:\n");
+            for (String d : descriptors) {
+                summary.append("  • ").append(d).append("\n");
+            }
+
+            return new DisassembleResult(true, combined.toString(), classCount, generatedFiles, zipFile, summary.toString(), descriptors);
+
+        } catch (Throwable e) {
+            return new DisassembleResult(false, "", 0, null, null, "Disassembly Exception: " + e.getMessage(), null);
         }
     }
 
     public static DisassembleResult disassembleBytes(Context context, byte[] dexBytes) {
+        if (dexBytes == null || dexBytes.length == 0) {
+            return new DisassembleResult(false, "", 0, null, null, "DEX byte array is null or empty.", null);
+        }
         try {
-            File tempDex = new File(context.getCacheDir(), "temp_input_" + System.currentTimeMillis() + ".dex");
+            File parentDir = context != null && context.getCacheDir() != null ?
+                    context.getCacheDir() :
+                    new File(System.getProperty("java.io.tmpdir", "/tmp"));
+            File tempDex = new File(parentDir, "temp_in_" + System.currentTimeMillis() + ".dex");
             try (FileOutputStream fos = new FileOutputStream(tempDex)) {
                 fos.write(dexBytes);
             }
             return disassemble(context, tempDex);
-        } catch (Exception e) {
-            return new DisassembleResult(false, "", 0, null, "Failed to write temp dex: " + e.getMessage());
+        } catch (Throwable e) {
+            return new DisassembleResult(false, "", 0, null, null, "Failed to write temp dex: " + e.getMessage(), null);
         }
     }
 
@@ -102,6 +150,34 @@ public class DexDisassembler {
                 collectFiles(f, list);
             } else {
                 list.add(f);
+            }
+        }
+    }
+
+    private static void createZip(File sourceDir, File zipFile) {
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipFile))) {
+            addDirToZip(sourceDir, sourceDir, zos);
+        } catch (Throwable ignored) {}
+    }
+
+    private static void addDirToZip(File rootDir, File currentDir, ZipOutputStream zos) throws Exception {
+        File[] files = currentDir.listFiles();
+        if (files == null) return;
+        byte[] buffer = new byte[4096];
+        for (File file : files) {
+            if (file.isDirectory()) {
+                addDirToZip(rootDir, file, zos);
+            } else {
+                String relativePath = rootDir.toURI().relativize(file.toURI()).getPath();
+                ZipEntry entry = new ZipEntry(relativePath);
+                zos.putNextEntry(entry);
+                try (FileInputStream fis = new FileInputStream(file)) {
+                    int len;
+                    while ((len = fis.read(buffer)) > 0) {
+                        zos.write(buffer, 0, len);
+                    }
+                }
+                zos.closeEntry();
             }
         }
     }

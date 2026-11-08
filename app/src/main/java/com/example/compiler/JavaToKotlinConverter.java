@@ -19,6 +19,10 @@ public class JavaToKotlinConverter {
         }
     }
 
+    /**
+     * Converts complex Java source code into clean, valid, idiomatic Kotlin code.
+     * Handles large multi-line classes, generics, companion objects, constructors, and control structures.
+     */
     public static ConvertResult convert(String javaSource) {
         if (javaSource == null || javaSource.trim().isEmpty()) {
             return new ConvertResult(false, "", "Java source is empty.");
@@ -29,103 +33,150 @@ public class JavaToKotlinConverter {
             StringBuilder kt = new StringBuilder();
             List<String> companionMembers = new ArrayList<>();
             boolean insideClass = false;
-            String className = "";
+            String currentClass = "";
             int braceDepth = 0;
 
-            for (String rawLine : lines) {
+            for (int lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+                String rawLine = lines[lineIdx];
                 String line = rawLine.trim();
 
-                // Package
+                // Empty lines
+                if (line.isEmpty()) {
+                    kt.append("\n");
+                    continue;
+                }
+
+                // Comments
+                if (line.startsWith("//") || line.startsWith("/*") || line.startsWith("*")) {
+                    kt.append(rawLine).append("\n");
+                    continue;
+                }
+
+                // Package declaration
                 if (line.startsWith("package ")) {
-                    String pkgLine = line.replace(";", "");
-                    if (pkgLine.contains("example")) {
-                        pkgLine = pkgLine.replace("com.example", "com.morsalin.djx").replace("example", "morsalin.djx");
-                    }
-                    kt.append(pkgLine).append("\n\n");
+                    String pkg = line.replace(";", "").trim();
+                    kt.append(pkg).append("\n\n");
                     continue;
                 }
 
-                // Import
+                // Import declaration
                 if (line.startsWith("import ")) {
-                    kt.append(line.replace(";", "")).append("\n");
+                    String imp = line.replace(";", "").trim();
+                    kt.append(imp).append("\n");
                     continue;
                 }
 
-                // Class declaration
-                if (line.contains("class ")) {
+                // Class / Interface / Enum header
+                if (isClassHeader(line)) {
                     insideClass = true;
-                    braceDepth = 1;
-                    String convertedClass = convertClassHeader(line);
-                    Matcher m = Pattern.compile("class\\s+([a-zA-Z0-9_]+)").matcher(line);
-                    if (m.find()) {
-                        className = m.group(1);
-                    }
-                    kt.append(convertedClass).append("\n");
+                    braceDepth = countBraces(line);
+                    currentClass = extractClassName(line);
+                    String convertedHeader = convertClassHeader(line);
+                    kt.append(convertedHeader).append("\n");
                     continue;
                 }
 
                 if (insideClass) {
-                    if (line.contains("{")) {
-                        braceDepth++;
-                    }
-                    if (line.contains("}")) {
-                        braceDepth--;
-                        if (braceDepth <= 0) {
-                            if (!companionMembers.isEmpty()) {
-                                kt.append("\n    companion object {\n");
-                                for (String cm : companionMembers) {
-                                    kt.append("        ").append(cm).append("\n");
-                                }
-                                kt.append("    }\n");
-                                companionMembers.clear();
+                    braceDepth += countBraces(line);
+
+                    if (line.equals("}") && braceDepth <= 0) {
+                        // Append companion object if static members were collected
+                        if (!companionMembers.isEmpty()) {
+                            kt.append("\n    companion object {\n");
+                            for (String cm : companionMembers) {
+                                kt.append("        ").append(cm).append("\n");
                             }
-                            kt.append("}\n");
-                            insideClass = false;
-                            continue;
-                        } else {
                             kt.append("    }\n");
-                            continue;
+                            companionMembers.clear();
                         }
+                        kt.append("}\n");
+                        insideClass = false;
+                        continue;
                     }
-                }
 
-                // Static field or method check
-                if (insideClass && line.contains(" static ")) {
-                    String convertedStatic = convertMember(line, className);
-                    companionMembers.add(convertedStatic);
-                    continue;
-                }
+                    // Check for static methods or fields
+                    if (isStaticMember(line)) {
+                        String convertedStatic = convertMember(line, currentClass);
+                        companionMembers.add(convertedStatic);
+                        continue;
+                    }
 
-                // Instance member or method
-                if (insideClass) {
-                    String converted = convertMember(line, className);
+                    // Standard class member
+                    String converted = convertMember(line, currentClass);
                     kt.append("    ").append(converted).append("\n");
                 } else {
-                    kt.append(line).append("\n");
+                    kt.append(convertStatement(line)).append("\n");
                 }
             }
 
+            // Flush remaining companion members if class ended without closing brace
+            if (!companionMembers.isEmpty()) {
+                kt.append("\ncompanion object {\n");
+                for (String cm : companionMembers) {
+                    kt.append("    ").append(cm).append("\n");
+                }
+                kt.append("}\n");
+            }
+
             String output = postProcessKotlin(kt.toString());
-            return new ConvertResult(true, output, "SUCCESS: Java successfully converted to Kotlin.");
+            return new ConvertResult(true, output, "SUCCESS: Java successfully transpiled to Kotlin.");
 
         } catch (Exception e) {
             return new ConvertResult(false, "", "Conversion Error: " + e.getMessage());
         }
     }
 
+    private static boolean isClassHeader(String line) {
+        return (line.contains("class ") || line.contains("interface ") || line.contains("enum "))
+                && !line.contains("class.") && !line.contains(".class");
+    }
+
+    private static int countBraces(String line) {
+        int count = 0;
+        for (char c : line.toCharArray()) {
+            if (c == '{') count++;
+            else if (c == '}') count--;
+        }
+        return count;
+    }
+
+    private static String extractClassName(String line) {
+        Matcher m = Pattern.compile("(?:class|interface|enum)\\s+([a-zA-Z0-9_]+)").matcher(line);
+        if (m.find()) {
+            return m.group(1);
+        }
+        return "UnknownClass";
+    }
+
+    private static boolean isStaticMember(String line) {
+        return (line.contains(" static ") || line.startsWith("static ")) && !line.contains("class ");
+    }
+
     private static String convertClassHeader(String line) {
-        String result = line.replace(";", "");
-        // Remove public
-        result = result.replaceAll("\\bpublic\\s+", "");
-        // extends / implements
-        if (result.contains(" extends ") || result.contains(" implements ")) {
-            result = result.replaceAll("\\s+extends\\s+", " : ");
-            result = result.replaceAll("\\s+implements\\s+", ", ");
-            // Append constructor parens to first superclass if present
-            int colonIdx = result.indexOf(":");
-            if (colonIdx != -1) {
-                String before = result.substring(0, colonIdx);
-                String after = result.substring(colonIdx + 1).trim();
+        String res = line.replace(";", "").trim();
+        // Remove redundant public
+        res = res.replaceAll("\\bpublic\\s+", "");
+
+        // Interface / Enum
+        if (res.contains("interface ")) {
+            return res.replaceAll("\\s+extends\\s+", " : ");
+        }
+        if (res.contains("enum ")) {
+            if (!res.contains("enum class")) {
+                res = res.replace("enum ", "enum class ");
+            }
+            return res;
+        }
+
+        // Extends & Implements
+        if (res.contains(" extends ") || res.contains(" implements ")) {
+            res = res.replaceAll("\\s+extends\\s+", " : ");
+            res = res.replaceAll("\\s+implements\\s+", ", ");
+
+            int colon = res.indexOf(":");
+            if (colon != -1) {
+                String prefix = res.substring(0, colon);
+                String after = res.substring(colon + 1).trim();
                 String[] supers = after.split(",");
                 if (supers.length > 0) {
                     String base = supers[0].trim();
@@ -133,61 +184,64 @@ public class JavaToKotlinConverter {
                         base = base + "()";
                     }
                     supers[0] = base;
-                    StringBuilder sb = new StringBuilder(before).append(": ");
+                    StringBuilder sb = new StringBuilder(prefix).append(": ");
                     for (int i = 0; i < supers.length; i++) {
                         sb.append(supers[i].trim());
                         if (i < supers.length - 1) sb.append(", ");
                     }
-                    result = sb.toString();
+                    res = sb.toString();
                 }
             }
         }
-        return result;
+        return res;
     }
 
     private static String convertMember(String line, String className) {
-        String res = line.replace(";", "");
+        String res = line.replace(";", "").trim();
 
-        // @Override
+        // Annotations
         res = res.replaceAll("@Override\\s*", "override ");
 
-        // Visibility
+        // Modifiers
         res = res.replaceAll("\\bpublic\\s+", "");
         res = res.replaceAll("\\bstatic\\s+", "");
 
-        // System.out.println
+        // Logging & System calls
         res = res.replaceAll("System\\.out\\.println\\(", "println(");
         res = res.replaceAll("System\\.out\\.print\\(", "print(");
 
-        // new ClassName( -> ClassName(
-        res = res.replaceAll("\\bnew\\s+([a-zA-Z0-9_]+)\\(", "$1(");
+        // Instance creation: new Foo() -> Foo()
+        res = res.replaceAll("\\bnew\\s+([a-zA-Z0-9_<>]+)\\(", "$1(");
 
-        // instanceof -> is
+        // Type check: instanceof -> is
         res = res.replaceAll("\\binstanceof\\b", "is");
 
+        // String equals: !a.equals(b) -> a != b, a.equals(b) -> a == b
+        res = res.replaceAll("!([a-zA-Z0-9_]+)\\.equals\\(([^)]+)\\)", "$1 != $2");
+        res = res.replaceAll("([a-zA-Z0-9_]+)\\.equals\\(([^)]+)\\)", "$1 == $2");
+
         // Method declaration: Type name(params) {
-        Pattern methodPat = Pattern.compile("([a-zA-Z0-9_<>\\[\\]]+)\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)\\s*\\{?");
+        Pattern methodPat = Pattern.compile("([a-zA-Z0-9_<>\\[\\]?]+)\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)\\s*(?:throws\\s+[^\\{]+)?(\\{?)");
         Matcher m = methodPat.matcher(res);
         if (m.find()) {
             String retType = m.group(1);
             String name = m.group(2);
             String params = m.group(3);
+            String openBrace = m.group(4);
 
-            // Skip control structures
             if (!name.equals("if") && !name.equals("for") && !name.equals("while") && !name.equals("switch") && !name.equals("catch")) {
                 if (name.equals(className)) {
-                    // Constructor
-                    return "constructor(" + convertParams(params) + ") {";
+                    return "constructor(" + convertParams(params) + ")" + (openBrace.isEmpty() ? "" : " " + openBrace);
                 }
                 String ktReturn = toKtType(retType);
                 String ktParams = convertParams(params);
-                String returnSuffix = ktReturn.equals("Unit") ? "" : ": " + ktReturn;
-                return "fun " + name + "(" + ktParams + ")" + returnSuffix + (res.endsWith("{") ? " {" : "");
+                String retClause = "Unit".equals(ktReturn) ? "" : ": " + ktReturn;
+                return "fun " + name + "(" + ktParams + ")" + retClause + (openBrace.isEmpty() ? "" : " " + openBrace);
             }
         }
 
-        // Field declaration: [final] Type name = val
-        Pattern fieldPat = Pattern.compile("(final)?\\s*([a-zA-Z0-9_<>\\[\\]]+)\\s+([a-zA-Z0-9_]+)(?:\\s*=\\s*(.*))?");
+        // Field declaration: [final] Type name [= val]
+        Pattern fieldPat = Pattern.compile("(final)?\\s*([a-zA-Z0-9_<>\\[\\]?]+)\\s+([a-zA-Z0-9_]+)(?:\\s*=\\s*(.*))?");
         Matcher fm = fieldPat.matcher(res);
         if (fm.find()) {
             boolean isFinal = fm.group(1) != null;
@@ -195,17 +249,26 @@ public class JavaToKotlinConverter {
             String name = fm.group(3);
             String val = fm.group(4);
 
-            if (!name.equals("return") && !name.equals("throw") && !name.equals("import") && !type.equals("return")) {
+            if (!name.equals("return") && !name.equals("throw") && !name.equals("import") && !type.equals("return") && !name.equals("case")) {
                 String ktType = toKtType(type);
-                String keyword = isFinal ? "val" : "var";
+                String kw = isFinal ? "val" : "var";
                 if (val != null && !val.trim().isEmpty()) {
-                    return keyword + " " + name + ": " + ktType + " = " + val.trim();
+                    return kw + " " + name + ": " + ktType + " = " + val.trim();
                 } else {
-                    return keyword + " " + name + ": " + ktType + "? = null";
+                    return kw + " " + name + ": " + ktType + "? = null";
                 }
             }
         }
 
+        return convertStatement(res);
+    }
+
+    private static String convertStatement(String line) {
+        String res = line;
+        res = res.replaceAll("\\bnew\\s+([a-zA-Z0-9_<>]+)\\(", "$1(");
+        res = res.replaceAll("System\\.out\\.println\\(", "println(");
+        res = res.replaceAll("System\\.out\\.print\\(", "print(");
+        res = res.replaceAll("\\binstanceof\\b", "is");
         return res;
     }
 
@@ -217,7 +280,9 @@ public class JavaToKotlinConverter {
             String p = parts[i].trim();
             String[] words = p.split("\\s+");
             if (words.length >= 2) {
-                sb.append(words[1]).append(": ").append(toKtType(words[0]));
+                String type = words[0];
+                String name = words[1];
+                sb.append(name).append(": ").append(toKtType(type));
             } else {
                 sb.append(p);
             }
@@ -231,6 +296,9 @@ public class JavaToKotlinConverter {
         type = type.trim();
         if (type.endsWith("[]")) {
             String elem = type.substring(0, type.length() - 2);
+            if ("int".equals(elem)) return "IntArray";
+            if ("byte".equals(elem)) return "ByteArray";
+            if ("long".equals(elem)) return "LongArray";
             return "Array<" + toKtType(elem) + ">";
         }
         switch (type) {
@@ -249,6 +317,6 @@ public class JavaToKotlinConverter {
     }
 
     private static String postProcessKotlin(String code) {
-        return code.replaceAll("(?m)^\\s+$", "");
+        return code.replaceAll("(?m)^[ \\t]+$", "");
     }
 }

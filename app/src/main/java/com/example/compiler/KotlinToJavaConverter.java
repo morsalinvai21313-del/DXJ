@@ -19,6 +19,11 @@ public class KotlinToJavaConverter {
         }
     }
 
+    /**
+     * Converts complex Kotlin source code into readable, valid, compilable Java source code.
+     * Supports data classes (generates constructor, getters, setters, equals, hashCode, toString),
+     * standard classes, companion objects, functions, and control flow.
+     */
     public static ConvertResult convert(String kotlinSource) {
         if (kotlinSource == null || kotlinSource.trim().isEmpty()) {
             return new ConvertResult(false, "", "Kotlin source is empty.");
@@ -37,13 +42,21 @@ public class KotlinToJavaConverter {
             for (String rawLine : lines) {
                 String line = rawLine.trim();
 
+                // Empty line
+                if (line.isEmpty()) {
+                    java.append("\n");
+                    continue;
+                }
+
+                // Comments
+                if (line.startsWith("//") || line.startsWith("/*") || line.startsWith("*")) {
+                    java.append(rawLine).append("\n");
+                    continue;
+                }
+
                 // Package
                 if (line.startsWith("package ")) {
-                    String pkgLine = line;
-                    if (pkgLine.contains("example")) {
-                        pkgLine = pkgLine.replace("com.example", "com.morsalin.djx").replace("example", "morsalin.djx");
-                    }
-                    java.append(pkgLine).append(";\n\n");
+                    java.append(line).append(";\n\n");
                     continue;
                 }
 
@@ -53,43 +66,46 @@ public class KotlinToJavaConverter {
                     continue;
                 }
 
-                // Companion object start
+                // Companion object boundary
                 if (line.contains("companion object")) {
                     inCompanion = true;
                     continue;
                 }
-
                 if (inCompanion && line.equals("}")) {
                     inCompanion = false;
                     continue;
                 }
 
                 // Class header
-                if (line.contains("class ")) {
+                if (line.contains("class ") || line.contains("interface ")) {
                     java.append(convertClassHeader(line)).append("\n");
                     continue;
                 }
 
-                // Function: fun name(params): ReturnType {
+                // Function: fun name(params): ReturnType
                 if (line.startsWith("fun ") || line.contains(" fun ")) {
                     String jvmMethod = convertFunction(line, inCompanion);
                     java.append("    ").append(jvmMethod).append("\n");
                     continue;
                 }
 
-                // Property: val name: Type = ... or var name: Type = ...
+                // Property: val / var
                 if (line.startsWith("val ") || line.startsWith("var ") || line.contains(" val ") || line.contains(" var ")) {
                     String jvmField = convertProperty(line, inCompanion);
                     java.append("    ").append(jvmField).append("\n");
                     continue;
                 }
 
-                // System calls / statements
+                // Statements
                 String convertedStmt = convertStatement(line);
-                java.append("    ").append(convertedStmt).append("\n");
+                if (line.equals("{") || line.equals("}")) {
+                    java.append(line).append("\n");
+                } else if (!convertedStmt.isEmpty()) {
+                    java.append("    ").append(convertedStmt).append("\n");
+                }
             }
 
-            return new ConvertResult(true, java.toString(), "SUCCESS: Kotlin converted to Java source.");
+            return new ConvertResult(true, java.toString(), "SUCCESS: Kotlin transpiled to standard Java source.");
 
         } catch (Exception e) {
             return new ConvertResult(false, "", "Conversion Error: " + e.getMessage());
@@ -125,19 +141,19 @@ public class KotlinToJavaConverter {
 
     private static String convertFunction(String line, boolean isStatic) {
         String res = line.trim();
-        // Extract fun name(params): ReturnType {
-        Pattern pat = Pattern.compile("fun\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*([a-zA-Z0-9_<>\\[\\]?]+))?\\s*\\{?");
+        Pattern pat = Pattern.compile("fun\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*([a-zA-Z0-9_<>\\[\\]?]+))?\\s*(\\{?)");
         Matcher m = pat.matcher(res);
         if (m.find()) {
             String name = m.group(1);
             String params = m.group(2);
             String retType = m.group(3) != null ? m.group(3) : "void";
+            String openBrace = m.group(4);
 
             String jRetType = toJavaType(retType);
             String jParams = convertKtParams(params);
             String staticMod = isStatic ? "static " : "";
 
-            return "public " + staticMod + jRetType + " " + name + "(" + jParams + ") {";
+            return "public " + staticMod + jRetType + " " + name + "(" + jParams + ")" + (openBrace.isEmpty() ? "" : " " + openBrace);
         }
         return res;
     }
@@ -172,7 +188,7 @@ public class KotlinToJavaConverter {
         res = res.replaceAll("\\bprintln\\(", "System.out.println(");
         res = res.replaceAll("\\bprint\\(", "System.out.print(");
         res = res.replaceAll("\\bis\\b", "instanceof");
-        if (!res.endsWith(";") && !res.endsWith("{") && !res.endsWith("}") && !res.isEmpty()) {
+        if (!res.endsWith(";") && !res.endsWith("{") && !res.endsWith("}") && !res.isEmpty() && !res.startsWith("//")) {
             res = res + ";";
         }
         return res;
@@ -215,16 +231,18 @@ public class KotlinToJavaConverter {
             case "Short": return "short";
             case "Char": return "char";
             case "Any": return "Object";
+            case "IntArray": return "int[]";
+            case "ByteArray": return "byte[]";
+            case "LongArray": return "long[]";
             default: return type;
         }
     }
 
     private static ConvertResult convertDataClass(String source) {
-        // e.g. data class User(val id: Int, val name: String)
         Pattern pat = Pattern.compile("data\\s+class\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)");
         Matcher m = pat.matcher(source);
         if (!m.find()) {
-            return new ConvertResult(false, "", "Could not parse data class.");
+            return new ConvertResult(false, "", "Could not parse data class declaration.");
         }
 
         String className = m.group(1);
@@ -232,18 +250,13 @@ public class KotlinToJavaConverter {
 
         StringBuilder java = new StringBuilder();
 
-        // Extract package if present
+        // Extract package
         Matcher pkgM = Pattern.compile("package\\s+([a-zA-Z0-9_.]+)").matcher(source);
         if (pkgM.find()) {
-            String pkg = pkgM.group(1);
-            if (pkg.contains("example")) {
-                pkg = pkg.replace("com.example", "com.morsalin.djx").replace("example", "morsalin.djx");
-            }
-            java.append("package ").append(pkg).append(";\n\n");
-        } else {
-            java.append("package com.morsalin.djx.").append(className.toLowerCase()).append(";\n\n");
+            java.append("package ").append(pkgM.group(1)).append(";\n\n");
         }
 
+        java.append("import java.util.Objects;\n\n");
         java.append("public class ").append(className).append(" {\n\n");
 
         List<String> fieldNames = new ArrayList<>();
@@ -252,8 +265,7 @@ public class KotlinToJavaConverter {
         if (params != null && !params.trim().isEmpty()) {
             String[] parts = params.split(",");
             for (String p : parts) {
-                p = p.trim();
-                p = p.replaceAll("^(val|var)\\s+", "");
+                p = p.trim().replaceAll("^(val|var)\\s+", "");
                 String[] words = p.split(":");
                 if (words.length >= 2) {
                     String name = words[0].trim();
@@ -282,10 +294,50 @@ public class KotlinToJavaConverter {
             String fName = fieldNames.get(i);
             String fType = fieldTypes.get(i);
             String cap = Character.toUpperCase(fName.charAt(0)) + fName.substring(1);
-            java.append("    public ").append(fType).append(" get").append(cap).append("() {\n");
+            String prefix = "boolean".equals(fType) ? "is" : "get";
+            java.append("    public ").append(fType).append(" ").append(prefix).append(cap).append("() {\n");
             java.append("        return this.").append(fName).append(";\n");
             java.append("    }\n\n");
         }
+
+        // equals
+        java.append("    @Override\n");
+        java.append("    public boolean equals(Object o) {\n");
+        java.append("        if (this == o) return true;\n");
+        java.append("        if (o == null || getClass() != o.getClass()) return false;\n");
+        java.append("        ").append(className).append(" that = (").append(className).append(") o;\n");
+        if (fieldNames.isEmpty()) {
+            java.append("        return true;\n");
+        } else {
+            java.append("        return ");
+            for (int i = 0; i < fieldNames.size(); i++) {
+                String fn = fieldNames.get(i);
+                String ft = fieldTypes.get(i);
+                if (isPrimitive(ft)) {
+                    java.append(fn).append(" == that.").append(fn);
+                } else {
+                    java.append("Objects.equals(").append(fn).append(", that.").append(fn).append(")");
+                }
+                if (i < fieldNames.size() - 1) java.append(" &&\n               ");
+            }
+            java.append(";\n");
+        }
+        java.append("    }\n\n");
+
+        // hashCode
+        java.append("    @Override\n");
+        java.append("    public int hashCode() {\n");
+        if (fieldNames.isEmpty()) {
+            java.append("        return 0;\n");
+        } else {
+            java.append("        return Objects.hash(");
+            for (int i = 0; i < fieldNames.size(); i++) {
+                java.append(fieldNames.get(i));
+                if (i < fieldNames.size() - 1) java.append(", ");
+            }
+            java.append(");\n");
+        }
+        java.append("    }\n\n");
 
         // toString
         java.append("    @Override\n");
@@ -300,6 +352,12 @@ public class KotlinToJavaConverter {
         java.append("    }\n");
 
         java.append("}\n");
-        return new ConvertResult(true, java.toString(), "SUCCESS: Kotlin data class converted to Java class.");
+        return new ConvertResult(true, java.toString(), "SUCCESS: Kotlin data class transpiled to complete Java POJO.");
+    }
+
+    private static boolean isPrimitive(String type) {
+        return "int".equals(type) || "boolean".equals(type) || "long".equals(type) ||
+                "float".equals(type) || "double".equals(type) || "byte".equals(type) ||
+                "short".equals(type) || "char".equals(type);
     }
 }

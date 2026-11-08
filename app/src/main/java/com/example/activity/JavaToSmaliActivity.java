@@ -48,7 +48,7 @@ public class JavaToSmaliActivity extends BaseModuleActivity {
 
     @Override
     protected void executeCompilation(String source, StringBuilder logs) {
-        JavaToSmaliCompiler.CompileResult res = JavaToSmaliCompiler.compile(source);
+        JavaToSmaliCompiler.CompileResult res = JavaToSmaliCompiler.compile(this, source);
         mainHandler.post(() -> {
             if (res.success) {
                 onExecutionSuccess(logs, "[SYS:STATUS] >> COMPILED " + res.className + ".smali", res.smaliCode, null, null);

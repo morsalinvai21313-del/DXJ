@@ -271,7 +271,27 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
             layoutPreviewTabs.setVisibility(hasLivePreview() ? View.VISIBLE : View.GONE);
         }
         showOutputTab(true);
-        loadTemplate();
+        // Box is left empty by default until user pastes or loads a file/template
+        if (etSourceCode != null) {
+            etSourceCode.setText("");
+            etSourceCode.setHint("Ready for input. Paste code, open file, or tap 'Template'...");
+        }
+        if (etOutputCode != null) {
+            etOutputCode.setText("");
+        }
+        if (containerLivePreview != null) {
+            containerLivePreview.removeAllViews();
+        }
+        if (layoutLoadedFileBanner != null) {
+            layoutLoadedFileBanner.setVisibility(View.GONE);
+        }
+        if (layoutTerminalConsole != null) {
+            layoutTerminalConsole.setVisibility(View.GONE);
+        }
+        if (layoutOutputCard != null) {
+            layoutOutputCard.setVisibility(View.GONE);
+        }
+        updateSourceStats();
     }
 
     protected void loadTemplate() {
@@ -397,8 +417,8 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
             return;
         }
 
-        // Play authentic futuristic robotic hacker sound effect!
-        CyberSoundEffects.playRoboticHackingSound();
+        // Play authentic continuous robotic compilation sound stream during animation
+        CyberSoundEffects.startRoboticAnimationSound();
 
         if (layoutTerminalConsole != null) layoutTerminalConsole.setVisibility(View.VISIBLE);
         if (layoutOutputCard != null) layoutOutputCard.setVisibility(View.GONE);
@@ -474,6 +494,9 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
     }
 
     protected void onExecutionSuccess(StringBuilder logs, String successStatus, String outputContent, byte[] binary, File file) {
+        CyberSoundEffects.stopRoboticAnimationSound();
+        CyberSoundEffects.playSuccessChirp();
+
         logs.append(successStatus).append("\n");
         if (tvTerminalLogs != null) tvTerminalLogs.setText(logs.toString());
         if (terminalProgress != null) terminalProgress.setVisibility(View.GONE);
@@ -496,6 +519,9 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
     }
 
     protected void onExecutionError(StringBuilder logs, String errorMsg) {
+        CyberSoundEffects.stopRoboticAnimationSound();
+        CyberSoundEffects.playErrorBuzz();
+
         logs.append("[ERROR] >> EXECUTION FAILED: ").append(errorMsg).append("\n");
         if (tvTerminalLogs != null) tvTerminalLogs.setText(logs.toString());
         if (terminalProgress != null) terminalProgress.setVisibility(View.GONE);
@@ -563,8 +589,15 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        CyberSoundEffects.stopRoboticAnimationSound();
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
+        CyberSoundEffects.stopRoboticAnimationSound();
         executor.shutdown();
     }
 }

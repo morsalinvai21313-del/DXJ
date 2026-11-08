@@ -94,6 +94,17 @@ public final class FileUtils {
         }
     }
 
+    public static void copyFile(File source, File destination) throws IOException {
+        try (FileInputStream in = new FileInputStream(source);
+             FileOutputStream out = new FileOutputStream(destination)) {
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = in.read(buf)) > 0) {
+                out.write(buf, 0, len);
+            }
+        }
+    }
+
     public static void shareFile(Context context, File file, String mimeType) {
         try {
             Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", file);

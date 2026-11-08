@@ -13,7 +13,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.cyberdex.stda"
+    applicationId = "com.morsalin.cyberdex.studio"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
@@ -101,6 +101,8 @@ dependencies {
   implementation("com.android.tools.smali:smali:3.0.10")
   implementation("com.android.tools.smali:smali-baksmali:3.0.10")
   implementation("com.android.tools.smali:smali-dexlib2:3.0.10")
+  implementation("org.eclipse.jdt:ecj:3.26.0")
+  implementation("com.android.tools:r8:8.2.33")
   implementation(libs.androidx.core.ktx)
   // implementation(libs.androidx.datastore.preferences)
   implementation(libs.androidx.lifecycle.runtime.compose)
@@ -145,5 +147,23 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
+}
+
+val copyApkToDownload = tasks.register<Copy>("copyApkToDownload") {
+  from(layout.buildDirectory.dir("outputs/apk/debug")) {
+    include("app-debug.apk")
+  }
+  into(rootProject.layout.projectDirectory.dir("Download"))
+}
+
+val copyApkToApkDownload = tasks.register<Copy>("copyApkToApkDownload") {
+  from(layout.buildDirectory.dir("outputs/apk/debug")) {
+    include("app-debug.apk")
+  }
+  into(rootProject.layout.projectDirectory.dir("APK_DOWNLOAD"))
+}
+
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+  finalizedBy(copyApkToDownload, copyApkToApkDownload)
 }
 
