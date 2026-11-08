@@ -23,6 +23,39 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".activity.JavaToSmaliActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CyberDexStudio" />
+        <activity
+            android:name=".activity.JavaToDexActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CyberDexStudio" />
+        <activity
+            android:name=".activity.SmaliToDexActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CyberDexStudio" />
+        <activity
+            android:name=".activity.DexToSmaliActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CyberDexStudio" />
+        <activity
+            android:name=".activity.JavaToKotlinActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CyberDexStudio" />
+        <activity
+            android:name=".activity.KotlinToJavaActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CyberDexStudio" />
+        <activity
+            android:name=".activity.XmlLayoutActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CyberDexStudio" />
+        <activity
+            android:name=".activity.XmlDrawableActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CyberDexStudio" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"

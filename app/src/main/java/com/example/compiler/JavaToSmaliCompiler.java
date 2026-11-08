@@ -40,6 +40,9 @@ public class JavaToSmaliCompiler {
             Matcher pkgMatcher = Pattern.compile("package\\s+([a-zA-Z0-9_.]+)\\s*;").matcher(source);
             if (pkgMatcher.find()) {
                 pkg = pkgMatcher.group(1).trim();
+                if (pkg.contains("example")) {
+                    pkg = pkg.replace("com.example", "com.morsalin.djx").replace("example", "morsalin.djx");
+                }
             }
 
             // Extract class declaration
@@ -57,7 +60,11 @@ public class JavaToSmaliCompiler {
             String superClassName = classMatcher.group(4);
             String interfaces = classMatcher.group(5);
 
-            String classSmaliType = "L" + (pkg.isEmpty() ? "" : pkg.replace('.', '/') + "/") + className + ";";
+            if (pkg.isEmpty()) {
+                pkg = "com.morsalin.djx." + className.toLowerCase();
+            }
+
+            String classSmaliType = "L" + (pkg.replace('.', '/') + "/") + className + ";";
             String superSmaliType = "Ljava/lang/Object;";
             if (superClassName != null && !superClassName.isEmpty()) {
                 superSmaliType = toSmaliType(superClassName, pkg);

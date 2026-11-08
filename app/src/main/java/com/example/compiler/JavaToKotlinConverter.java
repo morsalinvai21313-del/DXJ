@@ -37,7 +37,11 @@ public class JavaToKotlinConverter {
 
                 // Package
                 if (line.startsWith("package ")) {
-                    kt.append(line.replace(";", "")).append("\n\n");
+                    String pkgLine = line.replace(";", "");
+                    if (pkgLine.contains("example")) {
+                        pkgLine = pkgLine.replace("com.example", "com.morsalin.djx").replace("example", "morsalin.djx");
+                    }
+                    kt.append(pkgLine).append("\n\n");
                     continue;
                 }
 

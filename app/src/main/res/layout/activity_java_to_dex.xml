@@ -1,0 +1,409 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/cyber_bg_primary"
+    android:fitsSystemWindows="true">
+
+    <!-- Clean Cyber Top App Bar with Back Navigation -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="16dp"
+        android:background="#0A0E18">
+
+        <ImageView
+            android:id="@+id/btn_back"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="12dp"
+            android:src="@drawable/ic_arrow_back"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Back to Home" />
+
+        <TextView
+            android:id="@+id/tv_module_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="JAVA TO DEX"
+            android:fontFamily="@font/orbitron"
+            android:textColor="@color/cyber_cyan"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.04"
+            android:layout_marginStart="4dp" />
+
+        <TextView
+            android:id="@+id/tv_module_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="DEX"
+            android:fontFamily="@font/jetbrains_mono"
+            android:textColor="@color/cyber_cyan"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
+            android:background="@drawable/badge_cyber_cyan" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#162032" />
+
+    <!-- Full Dedicated Workspace -->
+    <ScrollView
+        android:id="@+id/main_scroll_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Workspace Top Action Bar (Paste, Open, Template, Clear) - Full Width Screen-Balanced -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:id="@+id/btn_action_paste"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:text="📋 Paste"
+                    android:fontFamily="@font/jetbrains_mono"
+                    android:textColor="@color/cyber_cyan"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="@drawable/btn_cyber_secondary"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btn_action_import"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:text="📁 Open"
+                    android:fontFamily="@font/jetbrains_mono"
+                    android:textColor="@color/cyber_cyan"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="@drawable/btn_cyber_secondary"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btn_action_template"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:text="Template"
+                    android:fontFamily="@font/jetbrains_mono"
+                    android:textColor="@color/cyber_cyan"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="@drawable/btn_cyber_secondary"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/btn_action_clear"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:text="Clear"
+                    android:fontFamily="@font/jetbrains_mono"
+                    android:textColor="@color/cyber_cyan"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="@drawable/btn_cyber_secondary" />
+            </LinearLayout>
+
+            <!-- 1. SOURCE CODE CARD -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/card_cyber_surface"
+                android:padding="12dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:id="@+id/tv_source_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="JAVA SOURCE CODE"
+                    android:fontFamily="@font/jetbrains_mono"
+                    android:textColor="@color/cyber_text_secondary"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.04"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- Loaded File Banner -->
+                <LinearLayout
+                    android:id="@+id/layout_loaded_file_banner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:background="@drawable/badge_loaded_file"
+                    android:visibility="gone"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/tv_loaded_file_info"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="📁 STORAGE FILE LOADED"
+                        android:fontFamily="@font/jetbrains_mono"
+                        android:textColor="@color/cyber_cyan"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btn_reset_loaded_file"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="✕ Revert"
+                        android:fontFamily="@font/jetbrains_mono"
+                        android:textColor="@color/cyber_error"
+                        android:textSize="11sp"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:paddingTop="2dp"
+                        android:paddingBottom="2dp"
+                        android:clickable="true"
+                        android:focusable="true" />
+                </LinearLayout>
+
+                <EditText
+                    android:id="@+id/et_source_code"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minLines="7"
+                    android:maxLines="14"
+                    android:gravity="top|start"
+                    android:fontFamily="@font/jetbrains_mono"
+                    android:textSize="12sp"
+                    android:lineSpacingExtra="3dp"
+                    android:textColor="@color/cyber_text_primary"
+                    android:textColorHint="@color/cyber_text_muted"
+                    android:hint="Enter Java class code here..."
+                    android:padding="12dp"
+                    android:background="@drawable/edit_text_cyber"
+                    android:scrollbars="vertical"
+                    android:scrollHorizontally="true"
+                    android:inputType="textMultiLine|textNoSuggestions" />
+            </LinearLayout>
+
+            <!-- 2. PRIMARY ACTION BUTTON -->
+            <TextView
+                android:id="@+id/btn_primary_action"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="BUILD DEX"
+                android:fontFamily="@font/orbitron"
+                android:textColor="@color/cyber_cyan"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="@drawable/btn_cyber_primary"
+                android:layout_marginBottom="12dp" />
+
+            <!-- 3. HACKER TERMINAL CONSOLE -->
+            <LinearLayout
+                android:id="@+id/layout_terminal_console"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/card_terminal_console"
+                android:padding="12dp"
+                android:visibility="gone"
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <View
+                        android:layout_width="7dp"
+                        android:layout_height="7dp"
+                        android:background="@drawable/badge_cyber_green"
+                        android:layout_marginEnd="8dp" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="DEX MATRIX TERMINAL"
+                        android:fontFamily="@font/jetbrains_mono"
+                        android:textColor="@color/cyber_green"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.04" />
+
+                    <ProgressBar
+                        android:id="@+id/terminal_progress"
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:indeterminate="true"
+                        android:indeterminateTint="@color/cyber_green" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tv_terminal_logs"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="[SYS:INIT] COMPILER MATRIX ONLINE..."
+                    android:fontFamily="@font/jetbrains_mono"
+                    android:textColor="@color/cyber_green"
+                    android:textSize="11sp"
+                    android:lineSpacingExtra="3dp" />
+            </LinearLayout>
+
+            <!-- 4. OUTPUT ARTIFACT CARD -->
+            <LinearLayout
+                android:id="@+id/layout_output_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/card_cyber_surface_cyan"
+                android:padding="12dp"
+                android:visibility="gone"
+                android:layout_marginBottom="16dp">
+
+                <TextView
+                    android:id="@+id/tv_output_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="CLASSES.DEX ARTIFACT"
+                    android:fontFamily="@font/jetbrains_mono"
+                    android:textColor="@color/cyber_cyan"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.04"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- Output Code Editor -->
+                <EditText
+                    android:id="@+id/et_output_code"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minLines="7"
+                    android:maxLines="16"
+                    android:gravity="top|start"
+                    android:fontFamily="@font/jetbrains_mono"
+                    android:textSize="12sp"
+                    android:lineSpacingExtra="3dp"
+                    android:textColor="@color/cyber_text_primary"
+                    android:textColorHint="@color/cyber_text_muted"
+                    android:hint="Artifact output will appear here..."
+                    android:padding="12dp"
+                    android:background="@drawable/edit_text_cyber"
+                    android:scrollbars="vertical"
+                    android:scrollHorizontally="true"
+                    android:inputType="textMultiLine|textNoSuggestions" />
+
+                <!-- 3 Full-Width Action Buttons at Bottom (Copy, Download, Share) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="12dp">
+
+                    <TextView
+                        android:id="@+id/btn_copy_output"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:text="Copy"
+                        android:fontFamily="@font/jetbrains_mono"
+                        android:textColor="@color/cyber_cyan"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:background="@drawable/btn_cyber_secondary"
+                        android:layout_marginEnd="8dp" />
+
+                    <TextView
+                        android:id="@+id/btn_download_output"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:text="Download"
+                        android:fontFamily="@font/jetbrains_mono"
+                        android:textColor="@color/cyber_cyan"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:background="@drawable/btn_cyber_secondary"
+                        android:layout_marginEnd="8dp" />
+
+                    <TextView
+                        android:id="@+id/btn_share_output"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:text="Share"
+                        android:fontFamily="@font/jetbrains_mono"
+                        android:textColor="@color/cyber_cyan"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:background="@drawable/btn_cyber_share" />
+                </LinearLayout>
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

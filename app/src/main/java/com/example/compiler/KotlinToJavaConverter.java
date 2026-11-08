@@ -39,7 +39,11 @@ public class KotlinToJavaConverter {
 
                 // Package
                 if (line.startsWith("package ")) {
-                    java.append(line).append(";\n\n");
+                    String pkgLine = line;
+                    if (pkgLine.contains("example")) {
+                        pkgLine = pkgLine.replace("com.example", "com.morsalin.djx").replace("example", "morsalin.djx");
+                    }
+                    java.append(pkgLine).append(";\n\n");
                     continue;
                 }
 
@@ -227,6 +231,19 @@ public class KotlinToJavaConverter {
         String params = m.group(2);
 
         StringBuilder java = new StringBuilder();
+
+        // Extract package if present
+        Matcher pkgM = Pattern.compile("package\\s+([a-zA-Z0-9_.]+)").matcher(source);
+        if (pkgM.find()) {
+            String pkg = pkgM.group(1);
+            if (pkg.contains("example")) {
+                pkg = pkg.replace("com.example", "com.morsalin.djx").replace("example", "morsalin.djx");
+            }
+            java.append("package ").append(pkg).append(";\n\n");
+        } else {
+            java.append("package com.morsalin.djx.").append(className.toLowerCase()).append(";\n\n");
+        }
+
         java.append("public class ").append(className).append(" {\n\n");
 
         List<String> fieldNames = new ArrayList<>();

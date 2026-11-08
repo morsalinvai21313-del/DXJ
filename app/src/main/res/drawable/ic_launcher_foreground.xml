@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/cyber_dex_icon_1794130983683"
+        android:drawable="@drawable/cyber_dex_launcher_1794144532465"
         android:gravity="center" />
 </layer-list>

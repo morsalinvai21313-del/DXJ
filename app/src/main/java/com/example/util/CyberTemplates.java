@@ -5,7 +5,7 @@ public final class CyberTemplates {
     private CyberTemplates() {}
 
     public static final String JAVA_SMALI_SAMPLE =
-            "package com.example.cyber;\n\n" +
+            "package com.morsalin.djx.cyberdemo;\n\n" +
             "public class CyberDemo {\n" +
             "    public static final String TAG = \"CYBER_DEX\";\n" +
             "    private int counter = 100;\n\n" +
@@ -21,7 +21,7 @@ public final class CyberTemplates {
             "}\n";
 
     public static final String JAVA_DEX_SAMPLE =
-            "package com.example.cyber;\n\n" +
+            "package com.morsalin.djx.bytecodeunit;\n\n" +
             "public class BytecodeUnit {\n" +
             "    public static final String ENGINE = \"CYBER_DEX_v1\";\n\n" +
             "    public static int execute(int seed) {\n" +
@@ -33,7 +33,7 @@ public final class CyberTemplates {
             "}\n";
 
     public static final String SMALI_DEX_SAMPLE =
-            ".class public Lcom/example/cyber/CyberNode;\n" +
+            ".class public Lcom/morsalin/djx/cybernode/CyberNode;\n" +
             ".super Ljava/lang/Object;\n" +
             ".source \"CyberNode.java\"\n\n" +
             ".field public static final NODE_ID:Ljava/lang/String; = \"NODE_77\"\n\n" +
@@ -54,7 +54,7 @@ public final class CyberTemplates {
             ".end method\n";
 
     public static final String JAVA_KOTLIN_SAMPLE =
-            "package com.example.cyber;\n\n" +
+            "package com.morsalin.djx.securitymanager;\n\n" +
             "import java.util.List;\n\n" +
             "public class SecurityManager {\n" +
             "    private String token = \"auth_key_99\";\n" +
@@ -71,7 +71,7 @@ public final class CyberTemplates {
             "}\n";
 
     public static final String KOTLIN_JAVA_SAMPLE =
-            "package com.example.cyber\n\n" +
+            "package com.morsalin.djx.moduleconfig\n\n" +
             "data class ModuleConfig(\n" +
             "    val id: Int,\n" +
             "    val moduleName: String,\n" +
