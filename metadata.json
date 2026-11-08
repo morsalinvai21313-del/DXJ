@@ -1,0 +1,6 @@
+{
+  "name": "Cyber Dex Studio",
+  "description": "Native developer suite for Android: Smali, DEX, Java, Kotlin conversion, and XML layout & drawable editors.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

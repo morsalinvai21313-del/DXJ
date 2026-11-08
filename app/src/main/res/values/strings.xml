@@ -1,0 +1,38 @@
+<resources>
+    <string name="app_name">Cyber Dex Studio</string>
+
+    <!-- Modules -->
+    <string name="module_java_smali">Java to Smali</string>
+    <string name="module_java_dex">Java to Dex</string>
+    <string name="module_smali_dex">Smali to Dex</string>
+    <string name="module_dex_smali">Dex to Smali</string>
+    <string name="module_java_kotlin">Java to Kotlin</string>
+    <string name="module_kotlin_java">Kotlin to Java</string>
+    <string name="module_xml_layout">XML Layout Editor</string>
+    <string name="module_xml_drawable">XML Drawable Editor</string>
+
+    <!-- Actions -->
+    <string name="action_convert">Convert</string>
+    <string name="action_assemble">Assemble Dex</string>
+    <string name="action_disassemble">Disassemble</string>
+    <string name="action_build">Build Dex</string>
+    <string name="action_preview">Live Preview</string>
+    <string name="action_validate">Validate XML</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_export">Export</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_template">Template</string>
+    <string name="action_import">Import</string>
+    <string name="action_edit_code">Code</string>
+    <string name="action_visual_preview">Preview</string>
+
+    <!-- Statuses -->
+    <string name="status_ready">Ready</string>
+    <string name="status_processing">Processing...</string>
+    <string name="status_success">Operation Successful</string>
+    <string name="status_error">Operation Failed</string>
+
+    <!-- Labels -->
+    <string name="label_source">Source</string>
+    <string name="label_output">Output</string>
+</resources>

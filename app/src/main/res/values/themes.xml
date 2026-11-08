@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CyberDexStudio" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/cyber_bg_primary</item>
+        <item name="android:statusBarColor">@color/cyber_bg_primary</item>
+        <item name="android:navigationBarColor">@color/cyber_bg_primary</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="colorPrimary">@color/cyber_cyan</item>
+        <item name="colorSecondary">@color/cyber_green</item>
+        <item name="colorSurface">@color/cyber_surface</item>
+        <item name="colorOnSurface">@color/cyber_text_primary</item>
+        <item name="android:textColorPrimary">@color/cyber_text_primary</item>
+        <item name="android:textColorSecondary">@color/cyber_text_secondary</item>
+    </style>
+
+    <!-- Keep Theme.MyApplication as alias for compatibility -->
+    <style name="Theme.MyApplication" parent="Theme.CyberDexStudio" />
+</resources>
