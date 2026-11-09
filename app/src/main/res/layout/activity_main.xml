@@ -1,212 +1,176 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/cyber_bg_primary"
+    android:background="#02060C"
     android:fitsSystemWindows="true">
 
-    <!-- Clean, Sleek Top Cyber App Bar -->
+    <!-- The Full Cyber Dex Studio Visual matching Screenshot 2 (No status bar, no softkeys) -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/bg_cyber_home_full"
+        android:contentDescription="@string/app_name" />
+
+    <!-- Clickable Interactive Target Overlay perfectly mapped to the 8 Cyber Buttons -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:background="#0A0E18">
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:weightSum="1720">
 
-        <ImageView
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:src="@drawable/cyber_dex_launcher_1794144532465"
-            android:contentDescription="@string/app_name" />
+        <!-- Top Header & Hero Hacker Artwork Region (0 to 680 in 1720 coordinates) -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="680" />
 
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="CYBER DEX"
-            android:fontFamily="@font/orbitron"
-            android:textColor="@color/cyber_cyan"
-            android:textSize="17sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.08"
-            android:layout_marginStart="12dp" />
+        <!-- 1. JAVA TO SMALI (center ~745, height ~110) -->
+        <View
+            android:id="@+id/btn_menu_java_to_smali"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="110"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:background="@drawable/btn_cyber_ripple_overlay"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/module_java_smali" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="STUDIO v1.0"
-            android:fontFamily="@font/jetbrains_mono"
-            android:textColor="@color/cyber_green"
-            android:textSize="10sp"
-            android:textStyle="bold"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="3dp"
-            android:paddingBottom="3dp"
-            android:background="@drawable/badge_cyber_green" />
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="10" />
+
+        <!-- 2. JAVA TO DEX (center ~865) -->
+        <View
+            android:id="@+id/btn_menu_java_to_dex"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="110"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:background="@drawable/btn_cyber_ripple_overlay"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/module_java_dex" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="10" />
+
+        <!-- 3. SMALI TO DEX (center ~985) -->
+        <View
+            android:id="@+id/btn_menu_smali_to_dex"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="110"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:background="@drawable/btn_cyber_ripple_overlay"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/module_smali_dex" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="10" />
+
+        <!-- 4. DEX TO SMALI (center ~1105) -->
+        <View
+            android:id="@+id/btn_menu_dex_to_smali"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="110"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:background="@drawable/btn_cyber_ripple_overlay"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/module_dex_smali" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="10" />
+
+        <!-- 5. JAVA TO KOTLIN (center ~1225) -->
+        <View
+            android:id="@+id/btn_menu_java_to_kotlin"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="110"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:background="@drawable/btn_cyber_ripple_overlay"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/module_java_kotlin" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="10" />
+
+        <!-- 6. KOTLIN TO JAVA (center ~1345) -->
+        <View
+            android:id="@+id/btn_menu_kotlin_to_java"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="110"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:background="@drawable/btn_cyber_ripple_overlay"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/module_kotlin_java" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="10" />
+
+        <!-- 7. XML LAYOUT EDITOR (center ~1465) -->
+        <View
+            android:id="@+id/btn_menu_xml_layout"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="110"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:background="@drawable/btn_cyber_ripple_overlay"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/module_xml_layout" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="10" />
+
+        <!-- 8. XML DRAWABLE EDITOR (center ~1585) -->
+        <View
+            android:id="@+id/btn_menu_xml_drawable"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="110"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:background="@drawable/btn_cyber_ripple_overlay"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="@string/module_xml_drawable" />
+
+        <!-- Bottom Cyber Console Base Trim Region (1640 to 1720) -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="80" />
+
     </LinearLayout>
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#162032" />
-
-    <!-- Fresh, Minimal Vertical List of Buttons with generous breathing room -->
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:fillViewport="true"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="20dp"
-        android:paddingBottom="28dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-            <!-- 1. JAVA TO SMALI -->
-            <TextView
-                android:id="@+id/btn_menu_java_to_smali"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:text="JAVA TO SMALI"
-                android:fontFamily="@font/orbitron"
-                android:textColor="@color/cyber_cyan"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="@drawable/btn_cyber_primary"
-                android:layout_marginBottom="16dp" />
-
-            <!-- 2. JAVA TO DEX -->
-            <TextView
-                android:id="@+id/btn_menu_java_to_dex"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:text="JAVA TO DEX"
-                android:fontFamily="@font/orbitron"
-                android:textColor="@color/cyber_cyan"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="@drawable/btn_cyber_primary"
-                android:layout_marginBottom="16dp" />
-
-            <!-- 3. SMALI TO DEX -->
-            <TextView
-                android:id="@+id/btn_menu_smali_to_dex"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:text="SMALI TO DEX"
-                android:fontFamily="@font/orbitron"
-                android:textColor="@color/cyber_cyan"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="@drawable/btn_cyber_primary"
-                android:layout_marginBottom="16dp" />
-
-            <!-- 4. DEX TO SMALI -->
-            <TextView
-                android:id="@+id/btn_menu_dex_to_smali"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:text="DEX TO SMALI"
-                android:fontFamily="@font/orbitron"
-                android:textColor="@color/cyber_cyan"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="@drawable/btn_cyber_primary"
-                android:layout_marginBottom="16dp" />
-
-            <!-- 5. JAVA TO KOTLIN -->
-            <TextView
-                android:id="@+id/btn_menu_java_to_kotlin"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:text="JAVA TO KOTLIN"
-                android:fontFamily="@font/orbitron"
-                android:textColor="@color/cyber_cyan"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="@drawable/btn_cyber_primary"
-                android:layout_marginBottom="16dp" />
-
-            <!-- 6. KOTLIN TO JAVA -->
-            <TextView
-                android:id="@+id/btn_menu_kotlin_to_java"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:text="KOTLIN TO JAVA"
-                android:fontFamily="@font/orbitron"
-                android:textColor="@color/cyber_cyan"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="@drawable/btn_cyber_primary"
-                android:layout_marginBottom="16dp" />
-
-            <!-- 7. XML LAYOUT EDITOR -->
-            <TextView
-                android:id="@+id/btn_menu_xml_layout"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:text="XML LAYOUT EDITOR"
-                android:fontFamily="@font/orbitron"
-                android:textColor="@color/cyber_cyan"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="@drawable/btn_cyber_primary"
-                android:layout_marginBottom="16dp" />
-
-            <!-- 8. XML DRAWABLE EDITOR -->
-            <TextView
-                android:id="@+id/btn_menu_xml_drawable"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:text="XML DRAWABLE EDITOR"
-                android:fontFamily="@font/orbitron"
-                android:textColor="@color/cyber_cyan"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.08"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="@drawable/btn_cyber_primary"
-                android:layout_marginBottom="16dp" />
-
-        </LinearLayout>
-    </ScrollView>
-
-</LinearLayout>
+</FrameLayout>
