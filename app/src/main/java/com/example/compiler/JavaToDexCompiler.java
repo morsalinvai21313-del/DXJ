@@ -16,7 +16,6 @@ import org.eclipse.jdt.core.compiler.batch.BatchCompiler;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
@@ -29,7 +28,6 @@ import java.util.regex.Pattern;
 public class JavaToDexCompiler {
 
     private static final String TAG = "JavaToDexCompiler";
-    private static String cachedClasspath = null;
 
     public static class JavaToDexResult {
         public final boolean success;
@@ -59,7 +57,7 @@ public class JavaToDexCompiler {
     /**
      * Compiles Java source into JVM .class bytecode using ECJ,
      * then transforms bytecode into an Android classes.dex using D8.
-     * Supports complex Java, generics, lambdas, interfaces, and multi-class files.
+     * Supports complex Java, generics, lambdas, interfaces, inner classes, and multi-class files.
      */
     public static JavaToDexResult compile(Context context, String javaSource) {
         if (javaSource == null || javaSource.trim().isEmpty()) {
@@ -84,7 +82,7 @@ public class JavaToDexCompiler {
             binDir.mkdirs();
             dexDir.mkdirs();
 
-            // Prepare source files (handles multi-class source code gracefully)
+            // Prepare source files with robust brace-aware top-level class detection
             List<File> javaFiles = prepareJavaSources(srcDir, javaSource);
             if (javaFiles.isEmpty()) {
                 return new JavaToDexResult(false, null, null, "Could not prepare Java source files.", 0, 0, 0, "", null);
@@ -100,6 +98,8 @@ public class JavaToDexCompiler {
             ecjArgs.add("-1.8"); // Java 8 compatibility (lambdas, streams, default interface methods)
             ecjArgs.add("-nowarn");
             ecjArgs.add("-proc:none"); // Disable annotation processing on mobile
+            ecjArgs.add("-encoding");
+            ecjArgs.add("UTF-8");
             ecjArgs.add("-d");
             ecjArgs.add(binDir.getAbsolutePath());
             ecjArgs.add("-sourcepath");
@@ -220,88 +220,10 @@ public class JavaToDexCompiler {
     }
 
     /**
-     * Resolves the compile classpath:
-     * 1. Bundled android.jar extracted from assets
-     * 2. Local Android SDK android.jar
-     * 3. System framework jars (/system/framework/framework.jar)
-     */
-    public static synchronized String resolveClasspath(Context context) {
-        if (cachedClasspath != null && new File(cachedClasspath).exists()) {
-            return cachedClasspath;
-        }
-
-        // 1. Check if extracted android.jar already exists in internal storage
-        if (context != null) {
-            File filesDir = context.getFilesDir();
-            if (filesDir != null) {
-                File localJar = new File(filesDir, "android.jar");
-                if (localJar.exists() && localJar.length() > 5000000) {
-                    cachedClasspath = localJar.getAbsolutePath();
-                    return cachedClasspath;
-                }
-                // Try extracting bundled android.jar from assets
-                try (InputStream in = context.getAssets().open("android.jar");
-                     FileOutputStream out = new FileOutputStream(localJar)) {
-                    byte[] buf = new byte[32768];
-                    int read;
-                    while ((read = in.read(buf)) != -1) {
-                        out.write(buf, 0, read);
-                    }
-                    out.flush();
-                    if (localJar.exists() && localJar.length() > 5000000) {
-                        cachedClasspath = localJar.getAbsolutePath();
-                        return cachedClasspath;
-                    }
-                } catch (Throwable t) {
-                    Log.d(TAG, "Assets android.jar not loaded: " + t.getMessage());
-                }
-            }
-        }
-
-        // 2. Check Android SDK paths in local development/container environment
-        String[] sdkPaths = {
-                "/opt/android/sdk/platforms/android-36/android.jar",
-                "/opt/android/sdk/platforms/android-36.1/android.jar",
-                "/opt/android-sdk-linux/platforms/android-34/android.jar",
-                System.getenv("ANDROID_HOME") != null ? System.getenv("ANDROID_HOME") + "/platforms/android-36/android.jar" : null,
-                System.getenv("ANDROID_SDK_ROOT") != null ? System.getenv("ANDROID_SDK_ROOT") + "/platforms/android-36/android.jar" : null
-        };
-        for (String p : sdkPaths) {
-            if (p != null) {
-                File f = new File(p);
-                if (f.exists() && f.isFile()) {
-                    cachedClasspath = f.getAbsolutePath();
-                    return cachedClasspath;
-                }
-            }
-        }
-
-        // 3. Fallback to device system framework on Android OS
-        String[] sysJars = {
-                "/system/framework/framework.jar",
-                "/system/framework/core-oj.jar",
-                "/apex/com.android.art/javalib/core-oj.jar",
-                "/system/framework/core-libart.jar"
-        };
-        StringBuilder sb = new StringBuilder();
-        for (String sj : sysJars) {
-            File f = new File(sj);
-            if (f.exists() && f.canRead()) {
-                if (sb.length() > 0) sb.append(File.pathSeparator);
-                sb.append(f.getAbsolutePath());
-            }
-        }
-        if (sb.length() > 0) {
-            cachedClasspath = sb.toString();
-            return cachedClasspath;
-        }
-
-        return null;
-    }
-
-    /**
-     * Splits multiple top-level classes into their respective .java files in the package directory.
-     * Prevents the classic "The public type X must be defined in its own file" compiler error.
+     * Prepares Java source files in the source directory.
+     * Uses strict brace-level tracking to only identify TRUE top-level classes (braceDepth == 0).
+     * Inner and nested classes are preserved completely inside their enclosing class and NEVER split.
+     * Normalizes secondary top-level classes so ECJ compiles multi-class files without conflict.
      */
     private static List<File> prepareJavaSources(File srcDir, String javaSource) {
         List<File> files = new ArrayList<>();
@@ -316,29 +238,22 @@ public class JavaToDexCompiler {
         File pkgDir = pkg.isEmpty() ? srcDir : new File(srcDir, pkg.replace('.', File.separatorChar));
         pkgDir.mkdirs();
 
-        // Extract imports
-        StringBuilder importsSb = new StringBuilder();
-        Matcher importMatcher = Pattern.compile("(?m)^\\s*import\\s+[a-zA-Z0-9_.*]+;").matcher(javaSource);
-        while (importMatcher.find()) {
-            importsSb.append(importMatcher.group()).append("\n");
-        }
-        String importsStr = importsSb.toString();
+        // Find true top-level class declarations by tracking brace depth
+        List<TopLevelClass> topLevelClasses = findTopLevelClasses(javaSource);
 
-        // Find all class/interface/enum blocks
-        Pattern classDeclPattern = Pattern.compile("(?m)^\\s*(?:public\\s+)?(?:final\\s+|abstract\\s+|static\\s+)?(?:class|interface|enum|@interface)\\s+([a-zA-Z0-9_]+)");
-        Matcher classMatcher = classDeclPattern.matcher(javaSource);
-
-        List<Integer> startPositions = new ArrayList<>();
-        List<String> classNames = new ArrayList<>();
-
-        while (classMatcher.find()) {
-            startPositions.add(classMatcher.start());
-            classNames.add(classMatcher.group(1));
+        if (topLevelClasses.isEmpty()) {
+            // Fallback: write as Main.java
+            File fallback = new File(pkgDir, "Main.java");
+            try (FileOutputStream fos = new FileOutputStream(fallback)) {
+                fos.write(javaSource.getBytes(StandardCharsets.UTF_8));
+            } catch (Exception ignored) {}
+            files.add(fallback);
+            return files;
         }
 
-        if (classNames.size() <= 1) {
-            // Single class: write directly
-            String primaryName = !classNames.isEmpty() ? classNames.get(0) : "Main";
+        if (topLevelClasses.size() == 1) {
+            // Exactly one top-level class (can have arbitrary inner/static/anonymous classes)
+            String primaryName = topLevelClasses.get(0).name;
             File singleFile = new File(pkgDir, primaryName + ".java");
             try (FileOutputStream fos = new FileOutputStream(singleFile)) {
                 fos.write(javaSource.getBytes(StandardCharsets.UTF_8));
@@ -347,30 +262,146 @@ public class JavaToDexCompiler {
             return files;
         }
 
-        // Multiple classes: split cleanly
-        for (int i = 0; i < startPositions.size(); i++) {
-            int start = startPositions.get(i);
-            int end = (i + 1 < startPositions.size()) ? startPositions.get(i + 1) : javaSource.length();
-            String classBody = javaSource.substring(start, end).trim();
-            String name = classNames.get(i);
-
-            StringBuilder fullClassSource = new StringBuilder();
-            if (!pkg.isEmpty()) {
-                fullClassSource.append("package ").append(pkg).append(";\n\n");
+        // Multiple top-level classes: identify primary public class or write cleanly
+        TopLevelClass primaryPublic = null;
+        for (TopLevelClass tlc : topLevelClasses) {
+            if (tlc.isPublic) {
+                primaryPublic = tlc;
+                break;
             }
-            if (!importsStr.isEmpty()) {
-                fullClassSource.append(importsStr).append("\n");
-            }
-            fullClassSource.append(classBody).append("\n");
-
-            File classFile = new File(pkgDir, name + ".java");
-            try (FileOutputStream fos = new FileOutputStream(classFile)) {
-                fos.write(fullClassSource.toString().getBytes(StandardCharsets.UTF_8));
-            } catch (Exception ignored) {}
-            files.add(classFile);
+        }
+        if (primaryPublic == null) {
+            primaryPublic = topLevelClasses.get(0);
         }
 
+        // To guarantee 100% ECJ success without type definition conflicts:
+        // We ensure only the primary class is public. Secondary top-level classes have 'public' removed.
+        String sanitizedSource = sanitizeSecondaryPublicClasses(javaSource, primaryPublic.startIndex);
+
+        File primaryFile = new File(pkgDir, primaryPublic.name + ".java");
+        try (FileOutputStream fos = new FileOutputStream(primaryFile)) {
+            fos.write(sanitizedSource.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ignored) {}
+        files.add(primaryFile);
+
         return files;
+    }
+
+    private static class TopLevelClass {
+        final String name;
+        final boolean isPublic;
+        final int startIndex;
+
+        TopLevelClass(String name, boolean isPublic, int startIndex) {
+            this.name = name;
+            this.isPublic = isPublic;
+            this.startIndex = startIndex;
+        }
+    }
+
+    /**
+     * Finds top-level class, interface, enum, or record declarations at brace depth 0.
+     */
+    private static List<TopLevelClass> findTopLevelClasses(String source) {
+        List<TopLevelClass> result = new ArrayList<>();
+        int braceDepth = 0;
+        boolean inSingleComment = false;
+        boolean inMultiComment = false;
+        boolean inString = false;
+        boolean inChar = false;
+
+        Pattern classPattern = Pattern.compile("(?<![a-zA-Z0-9_])(?:(public)\\s+)?(?:final\\s+|abstract\\s+|sealed\\s+|non-sealed\\s+|static\\s+)*(class|interface|enum|record|@interface)\\s+([a-zA-Z0-9_]+)");
+
+        String[] lines = source.split("\n", -1);
+        int charOffset = 0;
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+
+            if (!inMultiComment && !inString && braceDepth == 0) {
+                Matcher m = classPattern.matcher(line);
+                if (m.find()) {
+                    boolean isPublic = m.group(1) != null;
+                    String className = m.group(3);
+                    result.add(new TopLevelClass(className, isPublic, charOffset + m.start()));
+                }
+            }
+
+            // Update state & brace depth
+            for (int i = 0; i < line.length(); i++) {
+                char c = line.charAt(i);
+                char next = (i + 1 < line.length()) ? line.charAt(i + 1) : '\0';
+
+                if (inSingleComment) {
+                    continue;
+                }
+                if (inMultiComment) {
+                    if (c == '*' && next == '/') {
+                        inMultiComment = false;
+                        i++;
+                    }
+                    continue;
+                }
+                if (inString) {
+                    if (c == '\\') {
+                        i++;
+                    } else if (c == '"') {
+                        inString = false;
+                    }
+                    continue;
+                }
+                if (inChar) {
+                    if (c == '\\') {
+                        i++;
+                    } else if (c == '\'') {
+                        inChar = false;
+                    }
+                    continue;
+                }
+
+                if (c == '/' && next == '/') {
+                    inSingleComment = true;
+                    break;
+                } else if (c == '/' && next == '*') {
+                    inMultiComment = true;
+                    i++;
+                } else if (c == '"') {
+                    inString = true;
+                } else if (c == '\'') {
+                    inChar = true;
+                } else if (c == '{') {
+                    braceDepth++;
+                } else if (c == '}') {
+                    if (braceDepth > 0) braceDepth--;
+                }
+            }
+
+            inSingleComment = false;
+            charOffset += line.length() + 1; // +1 for newline
+        }
+
+        return result;
+    }
+
+    /**
+     * Removes the 'public' modifier from top-level classes other than the primary one,
+     * allowing ECJ to compile multiple top-level classes in a single file without error.
+     */
+    private static String sanitizeSecondaryPublicClasses(String source, int primaryClassIndex) {
+        Pattern pattern = Pattern.compile("(?m)^(\\s*)public\\s+(?:final\\s+|abstract\\s+|static\\s+)*(class|interface|enum|record)\\s+([a-zA-Z0-9_]+)");
+        Matcher matcher = pattern.matcher(source);
+        StringBuffer sb = new StringBuffer();
+        while (matcher.find()) {
+            if (matcher.start() != primaryClassIndex) {
+                // Secondary class: remove 'public '
+                String replacement = matcher.group().replaceFirst("\\bpublic\\s+", "");
+                matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+            } else {
+                matcher.appendReplacement(sb, Matcher.quoteReplacement(matcher.group()));
+            }
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
     }
 
     private static void collectClassFiles(File dir, List<File> list) {

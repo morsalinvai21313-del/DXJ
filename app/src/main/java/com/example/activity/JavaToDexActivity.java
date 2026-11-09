@@ -5,6 +5,10 @@ import com.example.compiler.JavaToDexCompiler;
 import com.example.util.CyberTemplates;
 import com.example.util.FileUtils;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+
 public class JavaToDexActivity extends BaseModuleActivity {
 
     @Override
@@ -45,6 +49,20 @@ public class JavaToDexActivity extends BaseModuleActivity {
     @Override
     protected boolean hasLivePreview() {
         return false;
+    }
+
+    @Override
+    protected List<PipelineAction> getPipelineActions(String output, byte[] binary, File file) {
+        List<PipelineAction> actions = new ArrayList<>();
+        if (file != null && file.exists()) {
+            actions.add(new PipelineAction("🔍 Disassemble in DEX to Smali", DexToSmaliActivity.class, null, file.getAbsolutePath(), true));
+        }
+        String src = etSourceCode != null ? etSourceCode.getText().toString() : "";
+        if (!src.isEmpty()) {
+            actions.add(new PipelineAction("📜 View in Java to Smali", JavaToSmaliActivity.class, src, null, false));
+            actions.add(new PipelineAction("🔄 Transpile Java to Kotlin", JavaToKotlinActivity.class, src, null, false));
+        }
+        return actions;
     }
 
     @Override

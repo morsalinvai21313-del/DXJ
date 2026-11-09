@@ -4,6 +4,10 @@ import com.example.R;
 import com.example.compiler.JavaToSmaliCompiler;
 import com.example.util.CyberTemplates;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+
 public class JavaToSmaliActivity extends BaseModuleActivity {
 
     @Override
@@ -47,11 +51,25 @@ public class JavaToSmaliActivity extends BaseModuleActivity {
     }
 
     @Override
+    protected List<PipelineAction> getPipelineActions(String output, byte[] binary, File file) {
+        List<PipelineAction> actions = new ArrayList<>();
+        // Send generated Smali directly to SmaliToDexActivity
+        actions.add(new PipelineAction("🚀 Send Smali to DEX Assembler", SmaliToDexActivity.class, output, null, false));
+        // Transpile original Java source to Kotlin
+        String src = etSourceCode != null ? etSourceCode.getText().toString() : "";
+        if (!src.isEmpty()) {
+            actions.add(new PipelineAction("🔄 Transpile Java to Kotlin", JavaToKotlinActivity.class, src, null, false));
+            actions.add(new PipelineAction("🔨 Compile Java to DEX", JavaToDexActivity.class, src, null, false));
+        }
+        return actions;
+    }
+
+    @Override
     protected void executeCompilation(String source, StringBuilder logs) {
         JavaToSmaliCompiler.CompileResult res = JavaToSmaliCompiler.compile(this, source);
         mainHandler.post(() -> {
             if (res.success) {
-                onExecutionSuccess(logs, "[SYS:STATUS] >> COMPILED " + res.className + ".smali", res.smaliCode, null, null);
+                onExecutionSuccess(logs, "[SYS:STATUS] >> COMPILED " + res.className + ".smali", res.smaliCode, null, res.dexFile);
             } else {
                 onExecutionError(logs, res.message);
             }

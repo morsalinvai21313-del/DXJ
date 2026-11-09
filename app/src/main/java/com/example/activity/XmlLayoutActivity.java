@@ -4,6 +4,10 @@ import com.example.R;
 import com.example.compiler.XmlLayoutRenderer;
 import com.example.util.CyberTemplates;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+
 public class XmlLayoutActivity extends BaseModuleActivity {
 
     @Override
@@ -44,6 +48,13 @@ public class XmlLayoutActivity extends BaseModuleActivity {
     @Override
     protected boolean hasLivePreview() {
         return true;
+    }
+
+    @Override
+    protected List<PipelineAction> getPipelineActions(String output, byte[] binary, File file) {
+        List<PipelineAction> actions = new ArrayList<>();
+        actions.add(new PipelineAction("🎨 Open in XML Drawable Editor", XmlDrawableActivity.class, null, null, false));
+        return actions;
     }
 
     @Override

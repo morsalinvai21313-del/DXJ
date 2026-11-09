@@ -5,6 +5,10 @@ import com.example.compiler.SmaliAssembler;
 import com.example.util.CyberTemplates;
 import com.example.util.FileUtils;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+
 public class SmaliToDexActivity extends BaseModuleActivity {
 
     @Override
@@ -45,6 +49,16 @@ public class SmaliToDexActivity extends BaseModuleActivity {
     @Override
     protected boolean hasLivePreview() {
         return false;
+    }
+
+    @Override
+    protected List<PipelineAction> getPipelineActions(String output, byte[] binary, File file) {
+        List<PipelineAction> actions = new ArrayList<>();
+        if (file != null && file.exists()) {
+            actions.add(new PipelineAction("🔍 Inspect in DEX to Smali", DexToSmaliActivity.class, null, file.getAbsolutePath(), true));
+        }
+        actions.add(new PipelineAction("✏️ Edit in Java to Smali", JavaToSmaliActivity.class, null, null, false));
+        return actions;
     }
 
     @Override

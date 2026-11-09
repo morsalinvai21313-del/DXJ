@@ -14,6 +14,7 @@ import com.example.activity.KotlinToJavaActivity;
 import com.example.activity.SmaliToDexActivity;
 import com.example.activity.XmlDrawableActivity;
 import com.example.activity.XmlLayoutActivity;
+import com.example.compiler.AndroidPlatformManager;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -21,6 +22,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // Pre-extract and index android.jar in the background on app start
+        AndroidPlatformManager.initializeAsync(this, null);
 
         setupModuleButtons();
     }

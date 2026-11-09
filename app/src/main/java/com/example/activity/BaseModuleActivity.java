@@ -4,6 +4,7 @@ import android.animation.ObjectAnimator;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -11,6 +12,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -24,6 +26,7 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.res.ResourcesCompat;
 
 import com.example.R;
 import com.example.util.CyberSoundEffects;
@@ -32,10 +35,32 @@ import com.example.util.FileUtils;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public abstract class BaseModuleActivity extends AppCompatActivity {
+
+    public static final String EXTRA_SOURCE_CODE = "com.example.EXTRA_SOURCE_CODE";
+    public static final String EXTRA_DEX_PATH = "com.example.EXTRA_DEX_PATH";
+    public static final String EXTRA_AUTO_RUN = "com.example.EXTRA_AUTO_RUN";
+
+    public static class PipelineAction {
+        public final String label;
+        public final Class<?> targetActivity;
+        public final String sourceCode;
+        public final String dexPath;
+        public final boolean autoRun;
+
+        public PipelineAction(String label, Class<?> targetActivity, String sourceCode, String dexPath, boolean autoRun) {
+            this.label = label;
+            this.targetActivity = targetActivity;
+            this.sourceCode = sourceCode;
+            this.dexPath = dexPath;
+            this.autoRun = autoRun;
+        }
+    }
 
     protected ScrollView mainScrollView;
     protected ImageView btnBack;
@@ -71,6 +96,7 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
     protected TextView btnCopyOutput;
     protected TextView btnDownloadOutput;
     protected TextView btnShareOutput;
+    protected LinearLayout layoutPipelineContainer;
 
     // Live Preview elements (for XML modules)
     protected LinearLayout layoutPreviewTabs;
@@ -100,6 +126,7 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
         bindViews();
         setupListeners();
         initModuleContent();
+        handleIncomingIntent();
     }
 
     protected abstract int getLayoutResourceId();
@@ -111,6 +138,10 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
     protected abstract String getMimeType();
     protected abstract boolean hasLivePreview();
     protected abstract void executeCompilation(String source, StringBuilder logs);
+
+    protected List<PipelineAction> getPipelineActions(String output, byte[] binary, File file) {
+        return new ArrayList<>();
+    }
 
     protected void bindViews() {
         mainScrollView = findViewById(R.id.main_scroll_view);
@@ -237,6 +268,41 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
         }
     }
 
+    protected void handleIncomingIntent() {
+        Intent intent = getIntent();
+        if (intent == null) return;
+
+        String incomingSource = intent.getStringExtra(EXTRA_SOURCE_CODE);
+        if (incomingSource != null && !incomingSource.trim().isEmpty()) {
+            if (etSourceCode != null) {
+                etSourceCode.setText(incomingSource);
+                etSourceCode.setSelection(incomingSource.length());
+            }
+            Toast.makeText(this, "Loaded code from pipeline module", Toast.LENGTH_SHORT).show();
+        }
+
+        String incomingDexPath = intent.getStringExtra(EXTRA_DEX_PATH);
+        if (incomingDexPath != null) {
+            File f = new File(incomingDexPath);
+            if (f.exists()) {
+                importedDexFile = f;
+                try {
+                    importedFileBytes = FileUtils.readBytes(f);
+                } catch (Exception ignored) {}
+                importedFileName = f.getName();
+                if (layoutLoadedFileBanner != null && tvLoadedFileInfo != null) {
+                    layoutLoadedFileBanner.setVisibility(View.VISIBLE);
+                    tvLoadedFileInfo.setText("📁 PIPELINE: " + f.getName() + " (" + FileUtils.formatFileSize(f.length()) + ")");
+                }
+                Toast.makeText(this, "Loaded DEX artifact from pipeline", Toast.LENGTH_SHORT).show();
+            }
+        }
+
+        if (intent.getBooleanExtra(EXTRA_AUTO_RUN, false)) {
+            mainHandler.postDelayed(this::startExecution, 400);
+        }
+    }
+
     protected void pasteFromClipboard() {
         try {
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -325,7 +391,7 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
     }
 
     protected void updateSourceStats() {
-        // Line stats removed as requested by user
+        // Line stats updated dynamically
     }
 
     protected void launchFilePicker() {
@@ -444,14 +510,14 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
             if (tvTerminalLogs != null) tvTerminalLogs.setText(logs.toString());
         }, 750);
 
-        // Step 3: Core compile (after 1200ms - authentic cinematic hacker loading)
+        // Step 3: Core compile (after 1200ms)
         mainHandler.postDelayed(() -> {
             logs.append("[SYS:EXEC] > COMPILING BYTECODE ARTIFACT...\n");
             if (tvTerminalLogs != null) tvTerminalLogs.setText(logs.toString());
 
             executor.execute(() -> {
                 try {
-                    Thread.sleep(250);
+                    Thread.sleep(200);
                     executeCompilation(source, logs);
                 } catch (Exception e) {
                     mainHandler.post(() -> onExecutionError(logs, "EXCEPTION: " + e.getMessage()));
@@ -507,6 +573,9 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
         this.lastGeneratedBinary = binary;
         this.lastGeneratedFile = file;
 
+        // Build Smart Pipeline Quick Actions
+        buildPipelineActionsUI(watermarkedOutput, binary, file);
+
         if (layoutOutputCard != null) {
             layoutOutputCard.setVisibility(View.VISIBLE);
             layoutOutputCard.setAlpha(0f);
@@ -516,6 +585,79 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
         if (mainScrollView != null && layoutOutputCard != null) {
             mainScrollView.postDelayed(() -> mainScrollView.smoothScrollTo(0, layoutOutputCard.getTop()), 100);
         }
+    }
+
+    protected void buildPipelineActionsUI(String output, byte[] binary, File file) {
+        if (layoutOutputCard == null) return;
+
+        // Remove existing pipeline container if already added
+        if (layoutPipelineContainer != null) {
+            layoutOutputCard.removeView(layoutPipelineContainer);
+            layoutPipelineContainer = null;
+        }
+
+        List<PipelineAction> actions = getPipelineActions(output, binary, file);
+        if (actions == null || actions.isEmpty()) return;
+
+        layoutPipelineContainer = new LinearLayout(this);
+        layoutPipelineContainer.setOrientation(LinearLayout.VERTICAL);
+        layoutPipelineContainer.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        int padTop = (int) (14 * getResources().getDisplayMetrics().density);
+        layoutPipelineContainer.setPadding(0, padTop, 0, 0);
+
+        // Pipeline Section Header
+        TextView header = new TextView(this);
+        header.setText("⚡ INTERCONNECT PIPELINE / SEND TO MODULE:");
+        header.setTextColor(Color.parseColor("#00F0FF"));
+        header.setTextSize(11f);
+        header.setTypeface(null, android.graphics.Typeface.BOLD);
+        header.setLetterSpacing(0.04f);
+        try {
+            header.setTypeface(ResourcesCompat.getFont(this, R.font.jetbrains_mono), android.graphics.Typeface.BOLD);
+        } catch (Exception ignored) {}
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        hlp.bottomMargin = (int) (4 * getResources().getDisplayMetrics().density);
+        header.setLayoutParams(hlp);
+        layoutPipelineContainer.addView(header);
+
+        for (PipelineAction act : actions) {
+            TextView btn = new TextView(this);
+            btn.setText(act.label);
+            btn.setTextColor(Color.parseColor("#00F0FF"));
+            btn.setTextSize(12f);
+            btn.setTypeface(null, android.graphics.Typeface.BOLD);
+            try {
+                btn.setTypeface(ResourcesCompat.getFont(this, R.font.jetbrains_mono), android.graphics.Typeface.BOLD);
+            } catch (Exception ignored) {}
+            btn.setGravity(Gravity.CENTER);
+            btn.setBackgroundResource(R.drawable.btn_cyber_pipeline);
+            btn.setClickable(true);
+            btn.setFocusable(true);
+
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    (int) (44 * getResources().getDisplayMetrics().density));
+            lp.topMargin = (int) (8 * getResources().getDisplayMetrics().density);
+            btn.setLayoutParams(lp);
+
+            btn.setOnClickListener(v -> {
+                Intent i = new Intent(BaseModuleActivity.this, act.targetActivity);
+                if (act.sourceCode != null) {
+                    i.putExtra(EXTRA_SOURCE_CODE, act.sourceCode);
+                }
+                if (act.dexPath != null) {
+                    i.putExtra(EXTRA_DEX_PATH, act.dexPath);
+                }
+                i.putExtra(EXTRA_AUTO_RUN, act.autoRun);
+                startActivity(i);
+            });
+
+            layoutPipelineContainer.addView(btn);
+        }
+
+        layoutOutputCard.addView(layoutPipelineContainer);
     }
 
     protected void onExecutionError(StringBuilder logs, String errorMsg) {

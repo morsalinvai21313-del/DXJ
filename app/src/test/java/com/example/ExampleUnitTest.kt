@@ -271,4 +271,41 @@ class ExampleUnitTest {
     assertTrue(javax.lang.model.SourceVersion.isName("com.example.CyberDemo"))
     assertTrue(javax.lang.model.SourceVersion.isKeyword("public"))
   }
+
+  @Test
+  fun testJavaWithInnerClassesCompilation() {
+    val javaCodeWithInnerClasses = """
+      package com.test.inner;
+
+      public class OuterClass {
+          private String outerField = "outer";
+
+          public static class StaticNestedClass {
+              public String getNestedValue() {
+                  return "nested_static";
+              }
+          }
+
+          public class InnerClass {
+              public String getCombined() {
+                  return outerField + "_inner";
+              }
+          }
+
+          public interface Callback {
+              void onEvent(int code);
+          }
+      }
+    """.trimIndent()
+
+    val result = JavaToDexCompiler.compile(null, javaCodeWithInnerClasses)
+    assertTrue("Java with nested/inner classes must compile cleanly: " + result.message, result.success)
+    assertTrue("Class count should be >= 3 (Outer, StaticNested, Inner)", result.classCount >= 3)
+    val smaliResult = DexDisassembler.disassemble(null, result.dexFile)
+    assertTrue("Disassembly must succeed: " + smaliResult.message, smaliResult.success)
+    assertTrue("Disassembly should contain OuterClass", smaliResult.smaliCode.contains("OuterClass"))
+    assertTrue("Disassembly should contain StaticNestedClass", smaliResult.smaliCode.contains("OuterClass\$StaticNestedClass"))
+    assertTrue("Disassembly should contain InnerClass", smaliResult.smaliCode.contains("OuterClass\$InnerClass"))
+  }
 }
+

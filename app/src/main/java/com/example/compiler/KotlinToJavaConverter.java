@@ -20,9 +20,9 @@ public class KotlinToJavaConverter {
     }
 
     /**
-     * Converts complex Kotlin source code into readable, valid, compilable Java source code.
+     * Converts Kotlin source code into readable, valid, compilable Java source code.
      * Supports data classes (generates constructor, getters, setters, equals, hashCode, toString),
-     * standard classes, companion objects, functions, and control flow.
+     * standard classes, companion objects, functions, loops, and control flow.
      */
     public static ConvertResult convert(String kotlinSource) {
         if (kotlinSource == null || kotlinSource.trim().isEmpty()) {
@@ -38,6 +38,7 @@ public class KotlinToJavaConverter {
             String[] lines = kotlinSource.split("\n");
             StringBuilder java = new StringBuilder();
             boolean inCompanion = false;
+            int companionBrace = 0;
 
             for (String rawLine : lines) {
                 String line = rawLine.trim();
@@ -56,41 +57,46 @@ public class KotlinToJavaConverter {
 
                 // Package
                 if (line.startsWith("package ")) {
-                    java.append(line).append(";\n\n");
+                    java.append(line.replace(";", "")).append(";\n\n");
                     continue;
                 }
 
                 // Import
                 if (line.startsWith("import ")) {
-                    java.append(line).append(";\n");
+                    java.append(line.replace(";", "")).append(";\n");
                     continue;
                 }
 
                 // Companion object boundary
                 if (line.contains("companion object")) {
                     inCompanion = true;
+                    companionBrace = countBraces(line);
                     continue;
                 }
-                if (inCompanion && line.equals("}")) {
-                    inCompanion = false;
-                    continue;
+                if (inCompanion) {
+                    companionBrace += countBraces(line);
+                    if (companionBrace <= 0 && line.equals("}")) {
+                        inCompanion = false;
+                        continue;
+                    }
                 }
 
-                // Class header
+                // Class header: class Foo(...) : Bar(), Baz
                 if (line.contains("class ") || line.contains("interface ")) {
                     java.append(convertClassHeader(line)).append("\n");
                     continue;
                 }
 
                 // Function: fun name(params): ReturnType
-                if (line.startsWith("fun ") || line.contains(" fun ")) {
+                if (line.startsWith("fun ") || line.contains(" fun ") || line.startsWith("override fun ") || line.contains(" override fun ")) {
                     String jvmMethod = convertFunction(line, inCompanion);
                     java.append("    ").append(jvmMethod).append("\n");
                     continue;
                 }
 
                 // Property: val / var
-                if (line.startsWith("val ") || line.startsWith("var ") || line.contains(" val ") || line.contains(" var ")) {
+                if (line.startsWith("val ") || line.startsWith("var ") || line.contains(" val ") || line.contains(" var ") ||
+                    line.startsWith("private val ") || line.startsWith("private var ")) {
                     String jvmField = convertProperty(line, inCompanion);
                     java.append("    ").append(jvmField).append("\n");
                     continue;
@@ -112,11 +118,29 @@ public class KotlinToJavaConverter {
         }
     }
 
+    private static int countBraces(String line) {
+        int count = 0;
+        for (char c : line.toCharArray()) {
+            if (c == '{') count++;
+            else if (c == '}') count--;
+        }
+        return count;
+    }
+
     private static String convertClassHeader(String line) {
         String res = line.trim();
-        if (!res.startsWith("public ")) {
+        if (!res.startsWith("public ") && !res.startsWith("private ") && !res.startsWith("abstract ")) {
             res = "public " + res;
         }
+
+        // Handle constructor params on class header: class Foo(val a: Int) : Bar()
+        Matcher ctorParamMatcher = Pattern.compile("^(.*?class\\s+[a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)(.*)$").matcher(res);
+        if (ctorParamMatcher.find()) {
+            String classDecl = ctorParamMatcher.group(1);
+            String rest = ctorParamMatcher.group(3);
+            res = classDecl + rest;
+        }
+
         if (res.contains(" : ")) {
             String[] parts = res.split(" : ");
             String classNamePart = parts[0];
@@ -141,6 +165,25 @@ public class KotlinToJavaConverter {
 
     private static String convertFunction(String line, boolean isStatic) {
         String res = line.trim();
+        boolean isOverride = res.startsWith("override ") || res.contains(" override ");
+        res = res.replaceAll("\\boverride\\s+", "");
+
+        // Check for single expression function: fun add(a: Int, b: Int): Int = a + b
+        Pattern singleExpPat = Pattern.compile("fun\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*([a-zA-Z0-9_<>\\[\\]?]+))?\\s*=\\s*(.*)$");
+        Matcher sem = singleExpPat.matcher(res);
+        if (sem.find()) {
+            String name = sem.group(1);
+            String params = sem.group(2);
+            String retType = sem.group(3) != null ? sem.group(3) : "void";
+            String expr = sem.group(4).trim();
+            String jRetType = toJavaType(retType);
+            String jParams = convertKtParams(params);
+            String staticMod = isStatic ? "static " : "";
+            String overrideAnno = isOverride ? "@Override\n    " : "";
+            return overrideAnno + "public " + staticMod + jRetType + " " + name + "(" + jParams + ") {\n        return " + convertStatement(expr) + "\n    }";
+        }
+
+        // Standard block function: fun foo(params): Type {
         Pattern pat = Pattern.compile("fun\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)(?:\\s*:\\s*([a-zA-Z0-9_<>\\[\\]?]+))?\\s*(\\{?)");
         Matcher m = pat.matcher(res);
         if (m.find()) {
@@ -152,8 +195,9 @@ public class KotlinToJavaConverter {
             String jRetType = toJavaType(retType);
             String jParams = convertKtParams(params);
             String staticMod = isStatic ? "static " : "";
+            String overrideAnno = isOverride ? "@Override\n    " : "";
 
-            return "public " + staticMod + jRetType + " " + name + "(" + jParams + ")" + (openBrace.isEmpty() ? "" : " " + openBrace);
+            return overrideAnno + "public " + staticMod + jRetType + " " + name + "(" + jParams + ")" + (openBrace.isEmpty() ? "" : " " + openBrace);
         }
         return res;
     }
@@ -161,6 +205,9 @@ public class KotlinToJavaConverter {
     private static String convertProperty(String line, boolean isStatic) {
         String res = line.trim();
         boolean isFinal = res.startsWith("val ") || res.contains(" val ");
+        boolean isPrivate = res.startsWith("private ");
+        res = res.replaceAll("^private\\s+", "");
+
         Pattern pat = Pattern.compile("(?:val|var)\\s+([a-zA-Z0-9_]+)(?:\\s*:\\s*([a-zA-Z0-9_<>\\[\\]?]+))?(?:\\s*=\\s*(.*))?");
         Matcher m = pat.matcher(res);
         if (m.find()) {
@@ -168,26 +215,82 @@ public class KotlinToJavaConverter {
             String type = m.group(2);
             String val = m.group(3);
 
-            String jType = (type != null) ? toJavaType(type) : "Object";
+            String jType = (type != null) ? toJavaType(type) : inferTypeFromValue(val);
             String staticMod = isStatic ? "static " : "";
             String finalMod = isFinal ? "final " : "";
+            String vis = isPrivate ? "private " : "public ";
 
             if (val != null && !val.trim().isEmpty()) {
                 val = convertStatement(val.trim());
                 if (!val.endsWith(";")) val = val + ";";
-                return "public " + staticMod + finalMod + jType + " " + name + " = " + val;
+                return vis + staticMod + finalMod + jType + " " + name + " = " + val;
             } else {
-                return "public " + staticMod + finalMod + jType + " " + name + ";";
+                return vis + staticMod + finalMod + jType + " " + name + ";";
             }
         }
         return res;
     }
 
+    private static String inferTypeFromValue(String val) {
+        if (val == null || val.isEmpty()) return "Object";
+        val = val.trim();
+        if (val.startsWith("\"")) return "String";
+        if ("true".equals(val) || "false".equals(val)) return "boolean";
+        if (val.matches("^-?\\d+$")) return "int";
+        if (val.matches("^-?\\d+L$")) return "long";
+        if (val.matches("^-?\\d+\\.\\d+f?$")) return "float";
+        if (val.matches("^-?\\d+\\.\\d+$")) return "double";
+        return "Object";
+    }
+
     private static String convertStatement(String line) {
         String res = line;
+
+        // Loop: for (i in 0 until n) -> for (int i = 0; i < n; i++)
+        Matcher untilM = Pattern.compile("for\\s*\\(\\s*([a-zA-Z0-9_]+)\\s+in\\s+([0-9a-zA-Z_]+)\\s+until\\s+([^)]+)\\)").matcher(res);
+        if (untilM.find()) {
+            String var = untilM.group(1);
+            String start = untilM.group(2);
+            String end = untilM.group(3).trim();
+            res = untilM.replaceFirst("for (int " + var + " = " + start + "; " + var + " < " + end + "; " + var + "++)");
+        }
+
+        // Loop: for (i in 0..n) -> for (int i = 0; i <= n; i++)
+        Matcher rangeM = Pattern.compile("for\\s*\\(\\s*([a-zA-Z0-9_]+)\\s+in\\s+([0-9a-zA-Z_]+)\\.\\.([^)]+)\\)").matcher(res);
+        if (rangeM.find()) {
+            String var = rangeM.group(1);
+            String start = rangeM.group(2);
+            String end = rangeM.group(3).trim();
+            res = rangeM.replaceFirst("for (int " + var + " = " + start + "; " + var + " <= " + end + "; " + var + "++)");
+        }
+
+        // Loop: for (item in list) -> for (Object item : list)
+        Matcher inM = Pattern.compile("for\\s*\\(\\s*([a-zA-Z0-9_]+)\\s+in\\s+([^)]+)\\)").matcher(res);
+        if (inM.find()) {
+            String var = inM.group(1);
+            String col = inM.group(2).trim();
+            res = inM.replaceFirst("for (Object " + var + " : " + col + ")");
+        }
+
         res = res.replaceAll("\\bprintln\\(", "System.out.println(");
         res = res.replaceAll("\\bprint\\(", "System.out.print(");
+
+        // Type checks: !is -> !(instanceof)
+        res = res.replaceAll("([a-zA-Z0-9_]+)\\s+!is\\s+([a-zA-Z0-9_<>]+)", "!($1 instanceof $2)");
         res = res.replaceAll("\\bis\\b", "instanceof");
+
+        // Cast: x as String -> (String) x
+        res = res.replaceAll("([a-zA-Z0-9_]+)\\s+as\\s+([a-zA-Z0-9_<>]+)", "($2) $1");
+
+        // Null coalescing: a ?: b -> (a != null ? a : b)
+        Matcher elvisM = Pattern.compile("([a-zA-Z0-9_]+)\\s*\\?:\\s*([^;\\n]+)").matcher(res);
+        if (elvisM.find()) {
+            String a = elvisM.group(1);
+            String b = elvisM.group(2).trim();
+            res = elvisM.replaceFirst("(" + a + " != null ? " + a + " : " + b + ")");
+        }
+
+        // Semicolon
         if (!res.endsWith(";") && !res.endsWith("{") && !res.endsWith("}") && !res.isEmpty() && !res.startsWith("//")) {
             res = res + ";";
         }
@@ -234,6 +337,7 @@ public class KotlinToJavaConverter {
             case "IntArray": return "int[]";
             case "ByteArray": return "byte[]";
             case "LongArray": return "long[]";
+            case "BooleanArray": return "boolean[]";
             default: return type;
         }
     }

@@ -7,6 +7,8 @@ import com.example.util.CyberTemplates;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DexToSmaliActivity extends BaseModuleActivity {
 
@@ -48,6 +50,14 @@ public class DexToSmaliActivity extends BaseModuleActivity {
     @Override
     protected boolean hasLivePreview() {
         return false;
+    }
+
+    @Override
+    protected List<PipelineAction> getPipelineActions(String output, byte[] binary, File file) {
+        List<PipelineAction> actions = new ArrayList<>();
+        actions.add(new PipelineAction("🚀 Re-assemble in Smali to DEX", SmaliToDexActivity.class, output, null, false));
+        actions.add(new PipelineAction("⚡ Compare with Java to Smali", JavaToSmaliActivity.class, null, null, false));
+        return actions;
     }
 
     @Override

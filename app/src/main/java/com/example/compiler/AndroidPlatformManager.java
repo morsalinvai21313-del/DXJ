@@ -10,6 +10,8 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -27,8 +29,32 @@ public final class AndroidPlatformManager {
     private static volatile File resolvedAndroidJar = null;
     private static volatile Set<String> frameworkClassSet = null;
     private static final Object lock = new Object();
+    private static final ExecutorService initExecutor = Executors.newSingleThreadExecutor();
 
     private AndroidPlatformManager() {}
+
+    /**
+     * Pre-extracts and initializes android.jar asynchronously on app launch.
+     */
+    public static void initializeAsync(Context context, Runnable onComplete) {
+        if (context == null) return;
+        final Context appCtx = context.getApplicationContext();
+        initExecutor.execute(() -> {
+            try {
+                File jar = getAndroidJar(appCtx);
+                if (jar != null && jar.exists()) {
+                    Log.i(TAG, "AndroidPlatformManager ready with jar: " + jar.getAbsolutePath() + " (" + jar.length() + " bytes)");
+                    getFrameworkClassIndex(appCtx);
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Background android.jar initialization note: " + t.getMessage());
+            } finally {
+                if (onComplete != null) {
+                    onComplete.run();
+                }
+            }
+        });
+    }
 
     /**
      * Resolves and provides the canonical android.jar file.
@@ -58,22 +84,34 @@ public final class AndroidPlatformManager {
                         return resolvedAndroidJar;
                     }
 
-                    // 2. Extract bundled android.jar from APK assets
+                    // 2. Extract bundled android.jar from APK assets safely (atomic write via tmp)
+                    File tmpJar = new File(filesDir, "android.jar.tmp");
                     try (InputStream in = context.getAssets().open("android.jar");
-                         FileOutputStream out = new FileOutputStream(localJar)) {
+                         FileOutputStream out = new FileOutputStream(tmpJar)) {
                         byte[] buffer = new byte[65536];
                         int bytesRead;
                         while ((bytesRead = in.read(buffer)) != -1) {
                             out.write(buffer, 0, bytesRead);
                         }
                         out.flush();
-                        if (localJar.exists() && localJar.length() > 5000000) {
-                            resolvedAndroidJar = localJar;
-                            Log.i(TAG, "Extracted bundled android.jar (" + localJar.length() + " bytes)");
-                            return resolvedAndroidJar;
+                        if (tmpJar.exists() && tmpJar.length() > 5000000) {
+                            if (localJar.exists()) {
+                                localJar.delete();
+                            }
+                            if (tmpJar.renameTo(localJar)) {
+                                resolvedAndroidJar = localJar;
+                                Log.i(TAG, "Successfully extracted bundled android.jar (" + localJar.length() + " bytes)");
+                                return resolvedAndroidJar;
+                            } else if (tmpJar.exists() && tmpJar.length() > 5000000) {
+                                resolvedAndroidJar = tmpJar;
+                                return resolvedAndroidJar;
+                            }
                         }
                     } catch (Throwable t) {
                         Log.d(TAG, "Assets android.jar extraction skipped: " + t.getMessage());
+                        if (tmpJar.exists()) {
+                            tmpJar.delete();
+                        }
                     }
                 }
             }
@@ -84,6 +122,7 @@ public final class AndroidPlatformManager {
                     "/opt/android/sdk/platforms/android-36.1/android.jar",
                     "/opt/android-sdk-linux/platforms/android-34/android.jar",
                     System.getenv("ANDROID_HOME") != null ? System.getenv("ANDROID_HOME") + "/platforms/android-36/android.jar" : null,
+                    System.getenv("ANDROID_HOME") != null ? System.getenv("ANDROID_HOME") + "/platforms/android-34/android.jar" : null,
                     System.getenv("ANDROID_SDK_ROOT") != null ? System.getenv("ANDROID_SDK_ROOT") + "/platforms/android-36/android.jar" : null
             };
 
@@ -99,7 +138,7 @@ public final class AndroidPlatformManager {
 
             // 4. System framework jar fallback on Android OS devices
             File sysFramework = new File("/system/framework/framework.jar");
-            if (sysFramework.exists() && sysFramework.canRead()) {
+            if (sysFramework.exists() && sysFramework.canRead() && sysFramework.length() > 1000000) {
                 resolvedAndroidJar = sysFramework;
                 return resolvedAndroidJar;
             }

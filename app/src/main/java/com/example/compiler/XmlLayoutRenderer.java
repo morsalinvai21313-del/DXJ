@@ -10,12 +10,19 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.RelativeLayout;
 import android.widget.ScrollView;
+import android.widget.Space;
+import android.widget.Spinner;
 import android.widget.Switch;
+import android.widget.TableLayout;
+import android.widget.TableRow;
 import android.widget.TextView;
 
 import org.w3c.dom.Document;
@@ -56,6 +63,10 @@ public class XmlLayoutRenderer {
             Document doc = builder.parse(new InputSource(new StringReader(xmlContent)));
             Element root = doc.getDocumentElement();
 
+            if (root == null) {
+                return new RenderResult(false, null, "XML document does not contain a root element.", 0);
+            }
+
             int[] counter = new int[]{0};
             View rootView = buildViewNode(context, root, counter);
 
@@ -73,7 +84,7 @@ public class XmlLayoutRenderer {
     private static View buildViewNode(Context context, Element element, int[] counter) {
         counter[0]++;
         String tagName = element.getTagName();
-        // Strip namespace prefix if any (e.g. androidx.appcompat.widget.AppCompatTextView -> TextView)
+        // Strip package/namespace prefix if any (e.g. androidx.appcompat.widget.AppCompatTextView -> TextView)
         int lastDot = tagName.lastIndexOf('.');
         if (lastDot != -1) {
             tagName = tagName.substring(lastDot + 1);
@@ -96,13 +107,35 @@ public class XmlLayoutRenderer {
                 isViewGroup = true;
                 break;
             }
-            case "FrameLayout": {
+            case "FrameLayout":
+            case "CoordinatorLayout":
+            case "ConstraintLayout": {
                 view = new FrameLayout(context);
                 isViewGroup = true;
                 break;
             }
             case "ScrollView": {
                 view = new ScrollView(context);
+                isViewGroup = true;
+                break;
+            }
+            case "TableLayout": {
+                TableLayout tl = new TableLayout(context);
+                view = tl;
+                isViewGroup = true;
+                break;
+            }
+            case "TableRow": {
+                TableRow tr = new TableRow(context);
+                view = tr;
+                isViewGroup = true;
+                break;
+            }
+            case "RadioGroup": {
+                RadioGroup rg = new RadioGroup(context);
+                String orient = getAttr(element, "orientation");
+                rg.setOrientation("horizontal".equalsIgnoreCase(orient) ? RadioGroup.HORIZONTAL : RadioGroup.VERTICAL);
+                view = rg;
                 isViewGroup = true;
                 break;
             }
@@ -132,12 +165,26 @@ public class XmlLayoutRenderer {
                 view = iv;
                 break;
             }
+            case "ImageButton": {
+                ImageButton ib = new ImageButton(context);
+                ib.setImageResource(android.R.drawable.ic_menu_gallery);
+                view = ib;
+                break;
+            }
             case "CheckBox": {
                 CheckBox cb = new CheckBox(context);
                 applyTextProps(cb, element);
                 String checked = getAttr(element, "checked");
                 cb.setChecked("true".equalsIgnoreCase(checked));
                 view = cb;
+                break;
+            }
+            case "RadioButton": {
+                RadioButton rb = new RadioButton(context);
+                applyTextProps(rb, element);
+                String checked = getAttr(element, "checked");
+                rb.setChecked("true".equalsIgnoreCase(checked));
+                view = rb;
                 break;
             }
             case "ProgressBar": {
@@ -155,8 +202,20 @@ public class XmlLayoutRenderer {
                 view = sw;
                 break;
             }
+            case "Spinner": {
+                view = new Spinner(context);
+                break;
+            }
+            case "Space": {
+                view = new Space(context);
+                break;
+            }
+            case "View": {
+                view = new View(context);
+                break;
+            }
             default: {
-                // Generic container fallback
+                // Container fallback
                 LinearLayout fallback = new LinearLayout(context);
                 fallback.setOrientation(LinearLayout.VERTICAL);
                 view = fallback;
@@ -165,7 +224,7 @@ public class XmlLayoutRenderer {
             }
         }
 
-        // Apply general attributes
+        // Apply general layout parameters & styling
         applyViewAttributes(context, view, element);
 
         // Recursively build children
@@ -193,21 +252,58 @@ public class XmlLayoutRenderer {
         int width = parseDimension(context, widthStr, ViewGroup.LayoutParams.MATCH_PARENT);
         int height = parseDimension(context, heightStr, ViewGroup.LayoutParams.WRAP_CONTENT);
 
-        ViewGroup.LayoutParams lp = new ViewGroup.LayoutParams(width, height);
-        view.setLayoutParams(lp);
+        // Margins support
+        int ml = parseDp(context, getAttr(element, "layout_marginStart"));
+        if (ml == 0) ml = parseDp(context, getAttr(element, "layout_marginLeft"));
+        int mr = parseDp(context, getAttr(element, "layout_marginEnd"));
+        if (mr == 0) mr = parseDp(context, getAttr(element, "layout_marginRight"));
+        int mt = parseDp(context, getAttr(element, "layout_marginTop"));
+        int mb = parseDp(context, getAttr(element, "layout_marginBottom"));
+        int mAll = parseDp(context, getAttr(element, "layout_margin"));
+        if (mAll > 0) {
+            ml = mr = mt = mb = mAll;
+        }
+
+        ViewGroup.MarginLayoutParams mlp = new ViewGroup.MarginLayoutParams(width, height);
+        mlp.setMargins(ml, mt, mr, mb);
+        view.setLayoutParams(mlp);
 
         // Padding
-        String padStr = getAttr(element, "padding");
-        if (!padStr.isEmpty()) {
-            int p = parseDp(context, padStr);
-            view.setPadding(p, p, p, p);
+        int pl = parseDp(context, getAttr(element, "paddingStart"));
+        if (pl == 0) pl = parseDp(context, getAttr(element, "paddingLeft"));
+        int pr = parseDp(context, getAttr(element, "paddingEnd"));
+        if (pr == 0) pr = parseDp(context, getAttr(element, "paddingRight"));
+        int pt = parseDp(context, getAttr(element, "paddingTop"));
+        int pb = parseDp(context, getAttr(element, "paddingBottom"));
+        int pAll = parseDp(context, getAttr(element, "padding"));
+        if (pAll > 0) {
+            pl = pr = pt = pb = pAll;
         }
+        view.setPadding(pl, pt, pr, pb);
 
         // Background color
         String bgStr = getAttr(element, "background");
         if (!bgStr.isEmpty()) {
             int color = parseColor(bgStr, Color.TRANSPARENT);
             view.setBackgroundColor(color);
+        }
+
+        // Visibility
+        String vis = getAttr(element, "visibility");
+        if ("gone".equalsIgnoreCase(vis)) {
+            view.setVisibility(View.GONE);
+        } else if ("invisible".equalsIgnoreCase(vis)) {
+            view.setVisibility(View.INVISIBLE);
+        } else {
+            view.setVisibility(View.VISIBLE);
+        }
+
+        // Alpha
+        String alphaStr = getAttr(element, "alpha");
+        if (!alphaStr.isEmpty()) {
+            try {
+                view.setAlpha(Float.parseFloat(alphaStr));
+            } catch (Exception ignored) {}
         }
     }
 
@@ -269,7 +365,9 @@ public class XmlLayoutRenderer {
         try {
             String num = val.replaceAll("[^0-9.]", "");
             float f = Float.parseFloat(num);
-            return (int) (f * context.getResources().getDisplayMetrics().density);
+            float density = (context != null && context.getResources() != null) ?
+                    context.getResources().getDisplayMetrics().density : 2.0f;
+            return (int) (f * density);
         } catch (Exception e) {
             return 0;
         }

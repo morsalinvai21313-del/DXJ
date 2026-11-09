@@ -4,6 +4,10 @@ import com.example.R;
 import com.example.compiler.KotlinToJavaConverter;
 import com.example.util.CyberTemplates;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+
 public class KotlinToJavaActivity extends BaseModuleActivity {
 
     @Override
@@ -44,6 +48,15 @@ public class KotlinToJavaActivity extends BaseModuleActivity {
     @Override
     protected boolean hasLivePreview() {
         return false;
+    }
+
+    @Override
+    protected List<PipelineAction> getPipelineActions(String output, byte[] binary, File file) {
+        List<PipelineAction> actions = new ArrayList<>();
+        actions.add(new PipelineAction("🔨 Compile Generated Java to DEX", JavaToDexActivity.class, output, null, false));
+        actions.add(new PipelineAction("📜 Compile Generated Java to Smali", JavaToSmaliActivity.class, output, null, false));
+        actions.add(new PipelineAction("🔄 Convert Back: Java to Kotlin", JavaToKotlinActivity.class, output, null, false));
+        return actions;
     }
 
     @Override

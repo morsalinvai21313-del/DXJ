@@ -8,6 +8,10 @@ import com.example.R;
 import com.example.compiler.XmlDrawableRenderer;
 import com.example.util.CyberTemplates;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+
 public class XmlDrawableActivity extends BaseModuleActivity {
 
     @Override
@@ -48,6 +52,13 @@ public class XmlDrawableActivity extends BaseModuleActivity {
     @Override
     protected boolean hasLivePreview() {
         return true;
+    }
+
+    @Override
+    protected List<PipelineAction> getPipelineActions(String output, byte[] binary, File file) {
+        List<PipelineAction> actions = new ArrayList<>();
+        actions.add(new PipelineAction("📐 Open in XML Layout Editor", XmlLayoutActivity.class, null, null, false));
+        return actions;
     }
 
     @Override
