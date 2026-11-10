@@ -57,7 +57,8 @@ public class JavaToDexCompiler {
     /**
      * Compiles Java source into JVM .class bytecode using ECJ,
      * then transforms bytecode into an Android classes.dex using D8.
-     * Supports complex Java, generics, lambdas, interfaces, inner classes, and multi-class files.
+     * Supports complex Java, generics, lambdas, interfaces, inner classes, multi-class files,
+     * raw method snippets, auto-import resolution, and AndroidX stubs.
      */
     public static JavaToDexResult compile(Context context, String javaSource) {
         if (javaSource == null || javaSource.trim().isEmpty()) {
@@ -82,11 +83,20 @@ public class JavaToDexCompiler {
             binDir.mkdirs();
             dexDir.mkdirs();
 
+            // Normalize source: wrap raw snippets and auto-inject standard imports if missing
+            String processedSource = normalizeJavaSource(javaSource);
+
+            // Generate AndroidX / Support library stubs if referenced by user code
+            provisionFrameworkStubs(srcDir, processedSource);
+
             // Prepare source files with robust brace-aware top-level class detection
-            List<File> javaFiles = prepareJavaSources(srcDir, javaSource);
+            List<File> javaFiles = prepareJavaSources(srcDir, processedSource);
             if (javaFiles.isEmpty()) {
                 return new JavaToDexResult(false, null, null, "Could not prepare Java source files.", 0, 0, 0, "", null);
             }
+
+            // Detect Java version compliance (supports var in Java 11)
+            String complianceVersion = processedSource.contains("var ") ? "-11" : "-1.8";
 
             // Step 1: ECJ Java Compilation
             StringWriter ecjErr = new StringWriter();
@@ -95,7 +105,7 @@ public class JavaToDexCompiler {
             PrintWriter outWriter = new PrintWriter(ecjOut);
 
             List<String> ecjArgs = new ArrayList<>();
-            ecjArgs.add("-1.8"); // Java 8 compatibility (lambdas, streams, default interface methods)
+            ecjArgs.add(complianceVersion);
             ecjArgs.add("-nowarn");
             ecjArgs.add("-proc:none"); // Disable annotation processing on mobile
             ecjArgs.add("-encoding");
@@ -108,19 +118,28 @@ public class JavaToDexCompiler {
             // Android Framework Boot Classpath integration via AndroidPlatformManager
             File androidJar = AndroidPlatformManager.getAndroidJar(context);
             if (androidJar != null && androidJar.exists()) {
-                ecjArgs.add("-bootclasspath");
-                ecjArgs.add(androidJar.getAbsolutePath());
+                if ("-1.8".equals(complianceVersion)) {
+                    ecjArgs.add("-bootclasspath");
+                    ecjArgs.add(androidJar.getAbsolutePath());
+                }
                 ecjArgs.add("-classpath");
                 ecjArgs.add(androidJar.getAbsolutePath());
             } else {
                 String bootClasspath = AndroidPlatformManager.getBootClasspath(context);
                 if (bootClasspath != null && !bootClasspath.isEmpty()) {
+                    if ("-1.8".equals(complianceVersion)) {
+                        ecjArgs.add("-bootclasspath");
+                        ecjArgs.add(bootClasspath);
+                    }
                     ecjArgs.add("-classpath");
                     ecjArgs.add(bootClasspath);
                 }
             }
 
-            for (File jf : javaFiles) {
+            // Add all source files (including generated stubs)
+            List<File> allSources = new ArrayList<>();
+            collectSourceFiles(srcDir, allSources);
+            for (File jf : allSources) {
                 ecjArgs.add(jf.getAbsolutePath());
             }
 
@@ -220,11 +239,147 @@ public class JavaToDexCompiler {
     }
 
     /**
-     * Prepares Java source files in the source directory.
-     * Uses strict brace-level tracking to only identify TRUE top-level classes (braceDepth == 0).
-     * Inner and nested classes are preserved completely inside their enclosing class and NEVER split.
-     * Normalizes secondary top-level classes so ECJ compiles multi-class files without conflict.
+     * Normalizes Java code: wraps bare snippets in a class and injects standard Android & Java packages.
      */
+    private static String normalizeJavaSource(String source) {
+        String trimmed = source.trim();
+
+        // Check if there is any class/interface/enum/record declaration
+        Pattern classPattern = Pattern.compile("(?m)^\\s*(?:(?:public|private|protected|abstract|final|static|sealed|non-sealed)\\s+)*(class|interface|enum|record|@interface)\\s+[a-zA-Z0-9_]+");
+        boolean hasClass = classPattern.matcher(trimmed).find();
+
+        StringBuilder sb = new StringBuilder();
+
+        // Auto-inject missing standard imports for Android & Java core APIs
+        boolean hasPackage = trimmed.matches("(?s)^\\s*package\\s+[a-zA-Z0-9_.]+\\s*;.*");
+        String pkgLine = "";
+        String body = trimmed;
+        if (hasPackage) {
+            int semi = trimmed.indexOf(';');
+            pkgLine = trimmed.substring(0, semi + 1) + "\n\n";
+            body = trimmed.substring(semi + 1).trim();
+        }
+
+        sb.append(pkgLine);
+
+        // Core Android & Java imports (safe wildcards)
+        if (!body.contains("import android.app.")) sb.append("import android.app.*;\n");
+        if (!body.contains("import android.content.")) sb.append("import android.content.*;\n");
+        if (!body.contains("import android.content.res.")) sb.append("import android.content.res.*;\n");
+        if (!body.contains("import android.content.pm.")) sb.append("import android.content.pm.*;\n");
+        if (!body.contains("import android.os.")) sb.append("import android.os.*;\n");
+        if (!body.contains("import android.view.")) sb.append("import android.view.*;\n");
+        if (!body.contains("import android.view.animation.")) sb.append("import android.view.animation.*;\n");
+        if (!body.contains("import android.widget.")) sb.append("import android.widget.*;\n");
+        if (!body.contains("import android.graphics.")) sb.append("import android.graphics.*;\n");
+        if (!body.contains("import android.net.")) sb.append("import android.net.*;\n");
+        if (!body.contains("import android.util.")) sb.append("import android.util.*;\n");
+        if (!body.contains("import java.util.")) sb.append("import java.util.*;\n");
+        if (!body.contains("import java.io.")) sb.append("import java.io.*;\n");
+        sb.append("\n");
+
+        if (!hasClass) {
+            // Snippet mode: wrap in a public class
+            sb.append("public class MainModule {\n\n");
+            // Check if user provided method definitions or just statements
+            boolean hasMethod = body.contains("void ") || body.contains("int ") || body.contains("String ") ||
+                    body.contains("public ") || body.contains("private ") || body.contains("protected ");
+            if (hasMethod && body.contains("{")) {
+                sb.append(body).append("\n");
+            } else {
+                sb.append("    public static void run() {\n");
+                sb.append("        ").append(body.replace("\n", "\n        ")).append("\n");
+                sb.append("    }\n");
+            }
+            sb.append("}\n");
+        } else {
+            sb.append(body);
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * Generates lightweight AndroidX / Jetpack stubs if user code references them,
+     * allowing ECJ to compile modern Android code without missing dependency errors.
+     */
+    private static void provisionFrameworkStubs(File srcDir, String source) {
+        if (source.contains("androidx.appcompat.app.AppCompatActivity") || source.contains("AppCompatActivity")) {
+            writeStub(srcDir, "androidx/appcompat/app/AppCompatActivity.java",
+                    "package androidx.appcompat.app;\npublic class AppCompatActivity extends android.app.Activity {}\n");
+        }
+        if (source.contains("androidx.appcompat.widget.Toolbar") || source.contains("Toolbar")) {
+            writeStub(srcDir, "androidx/appcompat/widget/Toolbar.java",
+                    "package androidx.appcompat.widget;\npublic class Toolbar extends android.view.ViewGroup {\n" +
+                    "    public Toolbar(android.content.Context c) { super(c); }\n" +
+                    "    public void setTitle(CharSequence title) {}\n" +
+                    "    public void setSubtitle(CharSequence subtitle) {}\n" +
+                    "    @Override protected void onLayout(boolean c, int l, int t, int r, int b) {}\n" +
+                    "}\n");
+        }
+        if (source.contains("androidx.core.view.ViewCompat") || source.contains("ViewCompat")) {
+            writeStub(srcDir, "androidx/core/view/ViewCompat.java",
+                    "package androidx.core.view;\npublic class ViewCompat {\n" +
+                    "    public static void setElevation(android.view.View v, float e) {}\n" +
+                    "}\n");
+        }
+        if (source.contains("androidx.recyclerview.widget.RecyclerView") || source.contains("RecyclerView")) {
+            writeStub(srcDir, "androidx/recyclerview/widget/RecyclerView.java",
+                    "package androidx.recyclerview.widget;\npublic class RecyclerView extends android.view.ViewGroup {\n" +
+                    "    public RecyclerView(android.content.Context c) { super(c); }\n" +
+                    "    @Override protected void onLayout(boolean c, int l, int t, int r, int b) {}\n" +
+                    "    public static abstract class ViewHolder {\n" +
+                    "        public final android.view.View itemView;\n" +
+                    "        public ViewHolder(android.view.View v) { this.itemView = v; }\n" +
+                    "    }\n" +
+                    "    public static abstract class Adapter<VH extends ViewHolder> {\n" +
+                    "        public abstract VH onCreateViewHolder(android.view.ViewGroup p, int vt);\n" +
+                    "        public abstract void onBindViewHolder(VH holder, int pos);\n" +
+                    "        public abstract int getItemCount();\n" +
+                    "    }\n" +
+                    "    public void setAdapter(Adapter a) {}\n" +
+                    "    public void setLayoutManager(Object lm) {}\n" +
+                    "}\n");
+        }
+        if (source.contains("androidx.fragment.app.FragmentActivity") || source.contains("FragmentActivity")) {
+            writeStub(srcDir, "androidx/fragment/app/FragmentActivity.java",
+                    "package androidx.fragment.app;\npublic class FragmentActivity extends android.app.Activity {}\n");
+        }
+        if (source.contains("androidx.fragment.app.Fragment") || source.contains("Fragment")) {
+            writeStub(srcDir, "androidx/fragment/app/Fragment.java",
+                    "package androidx.fragment.app;\npublic class Fragment {}\n");
+        }
+        if (source.contains("androidx.core.app.ComponentActivity") || source.contains("ComponentActivity")) {
+            writeStub(srcDir, "androidx/core/app/ComponentActivity.java",
+                    "package androidx.core.app;\npublic class ComponentActivity extends android.app.Activity {}\n");
+        }
+        if (source.contains("androidx.core.app.ActivityCompat") || source.contains("ActivityCompat")) {
+            writeStub(srcDir, "androidx/core/app/ActivityCompat.java",
+                    "package androidx.core.app;\npublic class ActivityCompat {}\n");
+        }
+        if (source.contains("androidx.core.content.ContextCompat") || source.contains("ContextCompat")) {
+            writeStub(srcDir, "androidx/core/content/ContextCompat.java",
+                    "package androidx.core.content;\npublic class ContextCompat {}\n");
+        }
+        if (source.contains("NonNull") || source.contains("androidx.annotation.")) {
+            writeStub(srcDir, "androidx/annotation/NonNull.java",
+                    "package androidx.annotation;\nimport java.lang.annotation.*;\n@Retention(RetentionPolicy.CLASS)\npublic @interface NonNull {}\n");
+            writeStub(srcDir, "androidx/annotation/Nullable.java",
+                    "package androidx.annotation;\nimport java.lang.annotation.*;\n@Retention(RetentionPolicy.CLASS)\npublic @interface Nullable {}\n");
+        }
+    }
+
+    private static void writeStub(File srcDir, String relativePath, String content) {
+        try {
+            File stub = new File(srcDir, relativePath.replace('/', File.separatorChar));
+            File parent = stub.getParentFile();
+            if (parent != null) parent.mkdirs();
+            try (FileOutputStream fos = new FileOutputStream(stub)) {
+                fos.write(content.getBytes(StandardCharsets.UTF_8));
+            }
+        } catch (Exception ignored) {}
+    }
+
     private static List<File> prepareJavaSources(File srcDir, String javaSource) {
         List<File> files = new ArrayList<>();
 
@@ -242,8 +397,7 @@ public class JavaToDexCompiler {
         List<TopLevelClass> topLevelClasses = findTopLevelClasses(javaSource);
 
         if (topLevelClasses.isEmpty()) {
-            // Fallback: write as Main.java
-            File fallback = new File(pkgDir, "Main.java");
+            File fallback = new File(pkgDir, "MainModule.java");
             try (FileOutputStream fos = new FileOutputStream(fallback)) {
                 fos.write(javaSource.getBytes(StandardCharsets.UTF_8));
             } catch (Exception ignored) {}
@@ -252,7 +406,6 @@ public class JavaToDexCompiler {
         }
 
         if (topLevelClasses.size() == 1) {
-            // Exactly one top-level class (can have arbitrary inner/static/anonymous classes)
             String primaryName = topLevelClasses.get(0).name;
             File singleFile = new File(pkgDir, primaryName + ".java");
             try (FileOutputStream fos = new FileOutputStream(singleFile)) {
@@ -262,7 +415,7 @@ public class JavaToDexCompiler {
             return files;
         }
 
-        // Multiple top-level classes: identify primary public class or write cleanly
+        // Multiple top-level classes
         TopLevelClass primaryPublic = null;
         for (TopLevelClass tlc : topLevelClasses) {
             if (tlc.isPublic) {
@@ -274,8 +427,6 @@ public class JavaToDexCompiler {
             primaryPublic = topLevelClasses.get(0);
         }
 
-        // To guarantee 100% ECJ success without type definition conflicts:
-        // We ensure only the primary class is public. Secondary top-level classes have 'public' removed.
         String sanitizedSource = sanitizeSecondaryPublicClasses(javaSource, primaryPublic.startIndex);
 
         File primaryFile = new File(pkgDir, primaryPublic.name + ".java");
@@ -299,9 +450,6 @@ public class JavaToDexCompiler {
         }
     }
 
-    /**
-     * Finds top-level class, interface, enum, or record declarations at brace depth 0.
-     */
     private static List<TopLevelClass> findTopLevelClasses(String source) {
         List<TopLevelClass> result = new ArrayList<>();
         int braceDepth = 0;
@@ -316,8 +464,6 @@ public class JavaToDexCompiler {
         int charOffset = 0;
 
         for (String line : lines) {
-            String trimmed = line.trim();
-
             if (!inMultiComment && !inString && braceDepth == 0) {
                 Matcher m = classPattern.matcher(line);
                 if (m.find()) {
@@ -327,14 +473,11 @@ public class JavaToDexCompiler {
                 }
             }
 
-            // Update state & brace depth
             for (int i = 0; i < line.length(); i++) {
                 char c = line.charAt(i);
                 char next = (i + 1 < line.length()) ? line.charAt(i + 1) : '\0';
 
-                if (inSingleComment) {
-                    continue;
-                }
+                if (inSingleComment) continue;
                 if (inMultiComment) {
                     if (c == '*' && next == '/') {
                         inMultiComment = false;
@@ -377,23 +520,18 @@ public class JavaToDexCompiler {
             }
 
             inSingleComment = false;
-            charOffset += line.length() + 1; // +1 for newline
+            charOffset += line.length() + 1;
         }
 
         return result;
     }
 
-    /**
-     * Removes the 'public' modifier from top-level classes other than the primary one,
-     * allowing ECJ to compile multiple top-level classes in a single file without error.
-     */
     private static String sanitizeSecondaryPublicClasses(String source, int primaryClassIndex) {
         Pattern pattern = Pattern.compile("(?m)^(\\s*)public\\s+(?:final\\s+|abstract\\s+|static\\s+)*(class|interface|enum|record)\\s+([a-zA-Z0-9_]+)");
         Matcher matcher = pattern.matcher(source);
         StringBuffer sb = new StringBuffer();
         while (matcher.find()) {
             if (matcher.start() != primaryClassIndex) {
-                // Secondary class: remove 'public '
                 String replacement = matcher.group().replaceFirst("\\bpublic\\s+", "");
                 matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
             } else {
@@ -411,6 +549,18 @@ public class JavaToDexCompiler {
             if (f.isDirectory()) {
                 collectClassFiles(f, list);
             } else if (f.getName().endsWith(".class")) {
+                list.add(f);
+            }
+        }
+    }
+
+    private static void collectSourceFiles(File dir, List<File> list) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        for (File f : files) {
+            if (f.isDirectory()) {
+                collectSourceFiles(f, list);
+            } else if (f.getName().endsWith(".java")) {
                 list.add(f);
             }
         }

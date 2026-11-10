@@ -2,9 +2,13 @@ package com.example.compiler;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
 import android.graphics.drawable.LayerDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.content.res.ColorStateList;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -46,6 +50,10 @@ public class XmlDrawableRenderer {
             Document doc = builder.parse(new InputSource(new StringReader(xmlContent)));
             Element root = doc.getDocumentElement();
 
+            if (root == null) {
+                return new DrawableResult(false, null, "XML document does not contain a root element.", "");
+            }
+
             String rootTag = root.getTagName();
             Drawable resultDrawable = null;
             StringBuilder details = new StringBuilder();
@@ -56,8 +64,20 @@ public class XmlDrawableRenderer {
                 resultDrawable = parseLayerListElement(context, root, details);
             } else if ("selector".equals(rootTag)) {
                 resultDrawable = parseSelectorElement(context, root, details);
+            } else if ("ripple".equals(rootTag)) {
+                resultDrawable = parseRippleElement(context, root, details);
+            } else if ("color".equals(rootTag)) {
+                resultDrawable = parseColorElement(root, details);
+            } else if ("inset".equals(rootTag)) {
+                resultDrawable = parseInsetElement(context, root, details);
+            } else if ("vector".equals(rootTag) || "animated-vector".equals(rootTag)) {
+                resultDrawable = parseVectorElement(context, root, details);
             } else {
-                return new DrawableResult(false, null, "Unsupported root tag: <" + rootTag + ">. Expected <shape>, <layer-list>, or <selector>.", "");
+                // Fallback graceful shape
+                resultDrawable = parseShapeElement(context, root, details);
+                if (resultDrawable == null) {
+                    return new DrawableResult(false, null, "Unsupported root tag: <" + rootTag + ">.", "");
+                }
             }
 
             if (resultDrawable == null) {
@@ -114,7 +134,6 @@ public class XmlDrawableRenderer {
                         gd.setCornerRadius(r);
                         details.append("Corner Radius: ").append(radiusStr).append("\n");
                     } else {
-                        // Check individual corners
                         float tl = parseDp(context, getAttr(elem, "topLeftRadius"));
                         float tr = parseDp(context, getAttr(elem, "topRightRadius"));
                         float br = parseDp(context, getAttr(elem, "bottomRightRadius"));
@@ -184,7 +203,6 @@ public class XmlDrawableRenderer {
     }
 
     private static Drawable parseSelectorElement(Context context, Element root, StringBuilder details) {
-        // Build first item shape as representation
         NodeList children = root.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
             Node node = children.item(i);
@@ -205,6 +223,80 @@ public class XmlDrawableRenderer {
             }
         }
         return null;
+    }
+
+    private static Drawable parseRippleElement(Context context, Element root, StringBuilder details) {
+        String colorStr = getAttr(root, "color");
+        int rippleCol = parseColor(colorStr, Color.parseColor("#3300F0FF"));
+        ColorStateList csl = ColorStateList.valueOf(rippleCol);
+
+        Drawable content = null;
+        Drawable mask = null;
+        NodeList children = root.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node node = children.item(i);
+            if (node.getNodeType() != Node.ELEMENT_NODE) continue;
+            Element item = (Element) node;
+            if ("item".equals(item.getTagName())) {
+                NodeList sub = item.getChildNodes();
+                for (int j = 0; j < sub.getLength(); j++) {
+                    Node subNode = sub.item(j);
+                    if (subNode.getNodeType() == Node.ELEMENT_NODE) {
+                        Element shape = (Element) subNode;
+                        if ("shape".equals(shape.getTagName())) {
+                            if (content == null) {
+                                content = parseShapeElement(context, shape, details);
+                            } else if (mask == null) {
+                                mask = parseShapeElement(context, shape, details);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        details.append("Ripple Drawable: Color ").append(colorStr).append("\n");
+        return new RippleDrawable(csl, content, mask);
+    }
+
+    private static Drawable parseColorElement(Element root, StringBuilder details) {
+        String colStr = getAttr(root, "color");
+        int c = parseColor(colStr, Color.BLACK);
+        details.append("Color Drawable: ").append(colStr).append("\n");
+        return new ColorDrawable(c);
+    }
+
+    private static Drawable parseInsetElement(Context context, Element root, StringBuilder details) {
+        int inset = parseDp(context, getAttr(root, "inset"));
+        if (inset == 0) inset = parseDp(context, "8dp");
+        GradientDrawable gd = new GradientDrawable();
+        gd.setShape(GradientDrawable.RECTANGLE);
+        gd.setColor(Color.parseColor("#131B2B"));
+        gd.setStroke(2, Color.parseColor("#00F0FF"));
+        details.append("Inset Drawable: Inset ").append(inset).append("px\n");
+        return new InsetDrawable(gd, inset);
+    }
+
+    private static Drawable parseVectorElement(Context context, Element root, StringBuilder details) {
+        String w = getAttr(root, "width");
+        String h = getAttr(root, "height");
+        String vW = getAttr(root, "viewportWidth");
+        String vH = getAttr(root, "viewportHeight");
+        String tint = getAttr(root, "tint");
+
+        int pathCount = root.getElementsByTagName("path").getLength();
+        details.append("Vector Drawable XML:\n")
+                .append("• Dimensions: ").append(w).append(" x ").append(h).append("\n")
+                .append("• Viewport: ").append(vW).append(" x ").append(vH).append("\n")
+                .append("• Path Nodes: ").append(pathCount).append("\n");
+        if (!tint.isEmpty()) details.append("• Tint: ").append(tint).append("\n");
+
+        GradientDrawable preview = new GradientDrawable();
+        preview.setShape(GradientDrawable.RECTANGLE);
+        preview.setColor(Color.parseColor("#0B1526"));
+        preview.setStroke(2, Color.parseColor("#00F0FF"));
+        preview.setCornerRadius(parseDp(context, "8dp"));
+        return preview;
     }
 
     private static GradientDrawable.Orientation parseAngle(String angleStr) {
@@ -243,7 +335,9 @@ public class XmlDrawableRenderer {
         try {
             String num = val.replaceAll("[^0-9.]", "");
             float f = Float.parseFloat(num);
-            return (int) (f * context.getResources().getDisplayMetrics().density);
+            float density = (context != null && context.getResources() != null) ?
+                    context.getResources().getDisplayMetrics().density : 2.0f;
+            return (int) (f * density);
         } catch (Exception e) {
             return 0;
         }
@@ -258,6 +352,7 @@ public class XmlDrawableRenderer {
             if ("@android:color/white".equalsIgnoreCase(str)) return Color.WHITE;
             if ("@android:color/black".equalsIgnoreCase(str)) return Color.BLACK;
             if ("@android:color/transparent".equalsIgnoreCase(str)) return Color.TRANSPARENT;
+            if ("@color/cyber_cyan".equalsIgnoreCase(str)) return Color.parseColor("#00F0FF");
             return Color.parseColor("#" + str);
         } catch (Exception e) {
             return defaultColor;

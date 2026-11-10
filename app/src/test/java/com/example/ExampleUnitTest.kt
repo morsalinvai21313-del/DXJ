@@ -307,5 +307,77 @@ class ExampleUnitTest {
     assertTrue("Disassembly should contain StaticNestedClass", smaliResult.smaliCode.contains("OuterClass\$StaticNestedClass"))
     assertTrue("Disassembly should contain InnerClass", smaliResult.smaliCode.contains("OuterClass\$InnerClass"))
   }
+
+  @Test
+  fun testKotlinSnippetWithoutClass() {
+    val ktSnippet = """
+      fun calculateTotal(price: Int, tax: Int): Int {
+          val total = price + tax
+          return total
+      }
+    """.trimIndent()
+
+    val result = KotlinToJavaConverter.convert(ktSnippet)
+    assertTrue("Snippet conversion should succeed: " + result.message, result.success)
+    assertTrue("Should wrap in MainModule class", result.javaCode.contains("public class MainModule"))
+    assertTrue("Should contain converted method", result.javaCode.contains("public int calculateTotal"))
+
+    // Verify the converted Java code can compile to DEX!
+    val dexRes = JavaToDexCompiler.compile(null, result.javaCode)
+    assertTrue("Transpiled Java from Kotlin snippet should compile to DEX: " + dexRes.message, dexRes.success)
+  }
+
+  @Test
+  fun testAndroidXStubsAndRecyclerView() {
+    val androidXCode = """
+      package com.test.androidx;
+
+      import androidx.appcompat.app.AppCompatActivity;
+      import androidx.appcompat.widget.Toolbar;
+      import androidx.recyclerview.widget.RecyclerView;
+      import androidx.core.view.ViewCompat;
+      import android.os.Bundle;
+
+      public class ModernActivity extends AppCompatActivity {
+          private Toolbar toolbar;
+          private RecyclerView recyclerView;
+
+          @Override
+          protected void onCreate(Bundle savedInstanceState) {
+              super.onCreate(savedInstanceState);
+              toolbar = new Toolbar(this);
+              toolbar.setTitle("Modern App");
+              recyclerView = new RecyclerView(this);
+              ViewCompat.setElevation(recyclerView, 4.0f);
+          }
+      }
+    """.trimIndent()
+
+    val result = JavaToDexCompiler.compile(null, androidXCode)
+    assertTrue("Java with AndroidX stubs must compile cleanly: " + result.message, result.success)
+    assertTrue("Class count should be >= 1", result.classCount >= 1)
+
+    val smaliRes = DexDisassembler.disassemble(null, result.dexFile)
+    assertTrue("Smali disassembly must succeed: " + smaliRes.message, smaliRes.success)
+    assertTrue("Should contain ModernActivity smali", smaliRes.smaliCode.contains("ModernActivity"))
+  }
+
+  @Test
+  fun testKotlinStringTemplatesAndCollections() {
+    val ktSource = """
+      class OrderProcessor {
+          fun processOrder(customer: String, count: Int): String {
+              val items = listOf("A", "B")
+              println("Processing order for ${'$'}customer with ${'$'}{items.size} items")
+              return "Done"
+          }
+      }
+    """.trimIndent()
+
+    val result = KotlinToJavaConverter.convert(ktSource)
+    assertTrue("Conversion must succeed: " + result.message, result.success)
+    assertTrue("Should convert listOf to Arrays.asList", result.javaCode.contains("Arrays.asList"))
+    assertTrue("Should convert string template", result.javaCode.contains("customer") && result.javaCode.contains("items.size"));
+  }
 }
 

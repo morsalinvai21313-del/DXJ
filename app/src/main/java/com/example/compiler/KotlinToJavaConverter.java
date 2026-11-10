@@ -39,6 +39,7 @@ public class KotlinToJavaConverter {
             StringBuilder java = new StringBuilder();
             boolean inCompanion = false;
             int companionBrace = 0;
+            int methodDepth = 0;
 
             for (String rawLine : lines) {
                 String line = rawLine.trim();
@@ -91,27 +92,67 @@ public class KotlinToJavaConverter {
                 if (line.startsWith("fun ") || line.contains(" fun ") || line.startsWith("override fun ") || line.contains(" override fun ")) {
                     String jvmMethod = convertFunction(line, inCompanion);
                     java.append("    ").append(jvmMethod).append("\n");
+                    methodDepth += countBraces(line);
                     continue;
                 }
 
                 // Property: val / var
                 if (line.startsWith("val ") || line.startsWith("var ") || line.contains(" val ") || line.contains(" var ") ||
                     line.startsWith("private val ") || line.startsWith("private var ")) {
-                    String jvmField = convertProperty(line, inCompanion);
-                    java.append("    ").append(jvmField).append("\n");
+                    if (methodDepth > 0) {
+                        // Inside method body: convert as local variable
+                        String local = convertLocalVariable(line);
+                        java.append("        ").append(local).append("\n");
+                    } else {
+                        // Class level field
+                        String jvmField = convertProperty(line, inCompanion);
+                        java.append("    ").append(jvmField).append("\n");
+                    }
                     continue;
                 }
 
                 // Statements
+                methodDepth += countBraces(line);
                 String convertedStmt = convertStatement(line);
                 if (line.equals("{") || line.equals("}")) {
                     java.append(line).append("\n");
                 } else if (!convertedStmt.isEmpty()) {
-                    java.append("    ").append(convertedStmt).append("\n");
+                    java.append("        ").append(convertedStmt).append("\n");
                 }
             }
 
-            return new ConvertResult(true, java.toString(), "SUCCESS: Kotlin transpiled to standard Java source.");
+            String resultJava = java.toString();
+            boolean hasClassInSource = kotlinSource.contains("class ") || kotlinSource.contains("interface ");
+            if (!hasClassInSource) {
+                // Snippet mode: wrap top-level functions and properties into MainModule class
+                StringBuilder wrapped = new StringBuilder();
+                String[] resLines = resultJava.split("\n");
+                StringBuilder header = new StringBuilder();
+                StringBuilder body = new StringBuilder();
+                for (String rl : resLines) {
+                    String tr = rl.trim();
+                    if (tr.startsWith("package ") || tr.startsWith("import ")) {
+                        header.append(rl).append("\n");
+                    } else {
+                        body.append(rl).append("\n");
+                    }
+                }
+                wrapped.append(header);
+                if (header.length() > 0) wrapped.append("\n");
+                wrapped.append("public class MainModule {\n\n");
+                String[] bodyLines = body.toString().split("\n");
+                for (String bl : bodyLines) {
+                    if (!bl.trim().isEmpty()) {
+                        wrapped.append("    ").append(bl).append("\n");
+                    } else {
+                        wrapped.append("\n");
+                    }
+                }
+                wrapped.append("}\n");
+                resultJava = wrapped.toString();
+            }
+
+            return new ConvertResult(true, resultJava, "SUCCESS: Kotlin transpiled to standard Java source.");
 
         } catch (Exception e) {
             return new ConvertResult(false, "", "Conversion Error: " + e.getMessage());
@@ -231,6 +272,28 @@ public class KotlinToJavaConverter {
         return res;
     }
 
+    private static String convertLocalVariable(String line) {
+        String res = line.trim();
+        boolean isFinal = res.startsWith("val ") || res.contains(" val ");
+        Pattern pat = Pattern.compile("(?:val|var)\\s+([a-zA-Z0-9_]+)(?:\\s*:\\s*([a-zA-Z0-9_<>\\[\\]?]+))?(?:\\s*=\\s*(.*))?");
+        Matcher m = pat.matcher(res);
+        if (m.find()) {
+            String name = m.group(1);
+            String type = m.group(2);
+            String val = m.group(3);
+            String jType = (type != null) ? toJavaType(type) : inferTypeFromValue(val);
+            String finalMod = isFinal ? "final " : "";
+            if (val != null && !val.trim().isEmpty()) {
+                val = convertStatement(val.trim());
+                if (!val.endsWith(";")) val = val + ";";
+                return finalMod + jType + " " + name + " = " + val;
+            } else {
+                return finalMod + (type != null ? toJavaType(type) : "Object") + " " + name + ";";
+            }
+        }
+        return convertStatement(line);
+    }
+
     private static String inferTypeFromValue(String val) {
         if (val == null || val.isEmpty()) return "Object";
         val = val.trim();
@@ -240,6 +303,17 @@ public class KotlinToJavaConverter {
         if (val.matches("^-?\\d+L$")) return "long";
         if (val.matches("^-?\\d+\\.\\d+f?$")) return "float";
         if (val.matches("^-?\\d+\\.\\d+$")) return "double";
+        if (val.startsWith("listOf(") || val.startsWith("java.util.Arrays.asList(")) return "java.util.List";
+        if (val.startsWith("mutableListOf(") || val.startsWith("new java.util.ArrayList")) return "java.util.List";
+        if (val.startsWith("mapOf(") || val.startsWith("new java.util.HashMap")) return "java.util.Map";
+        if (val.startsWith("setOf(") || val.startsWith("new java.util.HashSet")) return "java.util.Set";
+        if (val.startsWith("new ")) {
+            Matcher m = Pattern.compile("new\\s+([a-zA-Z0-9_<>]+)").matcher(val);
+            if (m.find()) return m.group(1);
+        }
+        Matcher ctorM = Pattern.compile("^([A-Z][a-zA-Z0-9_]*)\\s*\\(").matcher(val);
+        if (ctorM.find()) return ctorM.group(1);
+        if (val.matches(".*[+\\-*/%].*")) return "int";
         return "Object";
     }
 
@@ -275,6 +349,14 @@ public class KotlinToJavaConverter {
         res = res.replaceAll("\\bprintln\\(", "System.out.println(");
         res = res.replaceAll("\\bprint\\(", "System.out.print(");
 
+        // String templates: "${foo.bar}" -> " + (foo.bar) + " and "$foo" -> " + foo + "
+        res = convertStringTemplates(res);
+
+        // Collections: listOf(...) -> java.util.Arrays.asList(...)
+        res = res.replaceAll("\\blistOf\\(", "java.util.Arrays.asList(");
+        res = res.replaceAll("\\bmutableListOf\\(", "new java.util.ArrayList<>(java.util.Arrays.asList(");
+        res = res.replaceAll("\\barrayOf\\(", "new Object[]{");
+
         // Type checks: !is -> !(instanceof)
         res = res.replaceAll("([a-zA-Z0-9_]+)\\s+!is\\s+([a-zA-Z0-9_<>]+)", "!($1 instanceof $2)");
         res = res.replaceAll("\\bis\\b", "instanceof");
@@ -295,6 +377,25 @@ public class KotlinToJavaConverter {
             res = res + ";";
         }
         return res;
+    }
+
+    private static String convertStringTemplates(String str) {
+        if (!str.contains("$")) return str;
+        // Handle ${expr}
+        Pattern expPat = Pattern.compile("\"([^\"]*?)\\$\\{([^}]+)\\}([^\"]*?)\"");
+        Matcher em = expPat.matcher(str);
+        while (em.find()) {
+            str = em.replaceFirst("\"" + Matcher.quoteReplacement(em.group(1)) + "\" + (" + Matcher.quoteReplacement(em.group(2)) + ") + \"" + Matcher.quoteReplacement(em.group(3)) + "\"");
+            em = expPat.matcher(str);
+        }
+        // Handle $var
+        Pattern varPat = Pattern.compile("\"([^\"]*?)\\$([a-zA-Z0-9_]+)([^\"]*?)\"");
+        Matcher vm = varPat.matcher(str);
+        while (vm.find()) {
+            str = vm.replaceFirst("\"" + Matcher.quoteReplacement(vm.group(1)) + "\" + " + Matcher.quoteReplacement(vm.group(2)) + " + \"" + Matcher.quoteReplacement(vm.group(3)) + "\"");
+            vm = varPat.matcher(str);
+        }
+        return str;
     }
 
     private static String convertKtParams(String params) {

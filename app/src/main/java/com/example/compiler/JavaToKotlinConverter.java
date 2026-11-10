@@ -21,7 +21,7 @@ public class JavaToKotlinConverter {
 
     /**
      * Converts Java source code into clean, valid, idiomatic Kotlin code.
-     * Handles complex classes, constructors, methods, companion objects, loops, casts, and expressions.
+     * Handles complex classes, constructors, methods, snippets, companion objects, loops, casts, and expressions.
      */
     public static ConvertResult convert(String javaSource) {
         if (javaSource == null || javaSource.trim().isEmpty()) {
@@ -106,7 +106,12 @@ public class JavaToKotlinConverter {
                     String converted = convertMember(line, currentClass);
                     kt.append("    ").append(converted).append("\n");
                 } else {
-                    kt.append(convertStatement(line)).append("\n");
+                    // Snippet mode: outside class, could still be a method or variable definition
+                    if (isMethodOrFieldDecl(line)) {
+                        kt.append(convertMember(line, "Snippet")).append("\n");
+                    } else {
+                        kt.append(convertStatement(line)).append("\n");
+                    }
                 }
             }
 
@@ -130,6 +135,13 @@ public class JavaToKotlinConverter {
     private static boolean isClassHeader(String line) {
         return (line.contains("class ") || line.contains("interface ") || line.contains("enum ") || line.contains("record "))
                 && !line.contains("class.") && !line.contains(".class") && !line.endsWith(";");
+    }
+
+    private static boolean isMethodOrFieldDecl(String line) {
+        return (line.contains("(") && line.contains(")") && (line.contains("void ") || line.contains("public ") ||
+                line.contains("private ") || line.contains("protected ") || line.contains("static "))) ||
+                (line.startsWith("final ") || line.startsWith("var ") || line.startsWith("val ") ||
+                line.matches("^(?:public|private|protected)?\\s*[a-zA-Z0-9_<>\\[\\]]+\\s+[a-zA-Z0-9_]+\\s*=.*"));
     }
 
     private static int countBraces(String line) {
@@ -207,13 +219,15 @@ public class JavaToKotlinConverter {
 
         // Annotations
         res = res.replaceAll("@Override\\s*", "override ");
+        res = res.replaceAll("@Nullable\\s*", "");
+        res = res.replaceAll("@NonNull\\s*", "");
 
         // Modifiers
         res = res.replaceAll("\\bpublic\\s+", "");
         res = res.replaceAll("\\bprivate\\s+", "private ");
         res = res.replaceAll("\\bprotected\\s+", "protected ");
 
-        // Check Constructor first: ClassName(params)
+        // Check Constructor: ClassName(params)
         Pattern ctorPat = Pattern.compile("^([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)\\s*(?:throws\\s+[^\\{]+)?(\\{?)");
         Matcher ctorM = ctorPat.matcher(res);
         if (ctorM.find()) {
@@ -326,6 +340,14 @@ public class JavaToKotlinConverter {
             String falseVal = ternaryM.group(3).trim();
             res = "if (" + cond + ") " + trueVal + " else " + falseVal;
         }
+
+        // Switch case -> when
+        if (res.startsWith("switch ") || res.startsWith("switch(")) {
+            res = res.replace("switch", "when");
+        }
+        res = res.replaceAll("\\bcase\\s+([^:]+):", "$1 ->");
+        res = res.replaceAll("\\bdefault:", "else ->");
+        res = res.replaceAll("\\bbreak;", "");
 
         return res;
     }

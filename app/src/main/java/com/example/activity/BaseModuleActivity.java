@@ -417,18 +417,24 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
             if (layoutTerminalConsole != null) layoutTerminalConsole.setVisibility(View.GONE);
             if (layoutOutputCard != null) layoutOutputCard.setVisibility(View.GONE);
 
-            boolean isDex = isDexBinary(fileName, bytes);
-            if (isDex) {
-                File cacheDex = new File(getCacheDir(), "imported_" + System.currentTimeMillis() + ".dex");
-                try (FileOutputStream fos = new FileOutputStream(cacheDex)) {
+            boolean isBinary = isBinaryBytecodeOrPackage(fileName, bytes);
+            if (isBinary) {
+                String ext = fileName != null && fileName.contains(".") ? fileName.substring(fileName.lastIndexOf(".")) : ".dex";
+                File cacheFile = new File(getCacheDir(), "imported_" + System.currentTimeMillis() + ext);
+                try (FileOutputStream fos = new FileOutputStream(cacheFile)) {
                     fos.write(bytes);
                 }
-                importedDexFile = cacheDex;
+                importedDexFile = cacheFile;
+
+                String formatDesc = "DEX BINARY";
+                if (fileName != null && fileName.toLowerCase().endsWith(".class")) formatDesc = "JVM CLASS BYTECODE";
+                else if (fileName != null && (fileName.toLowerCase().endsWith(".apk") || fileName.toLowerCase().endsWith(".zip"))) formatDesc = "APK/ZIP ARCHIVE";
 
                 String summary = "# ========================================================\n"
-                        + "# FILE LOADED: " + fileName + "\n"
+                        + "# ARTIFACT LOADED: " + fileName + "\n"
                         + "# SIZE: " + FileUtils.formatFileSize(bytes.length) + " (" + bytes.length + " bytes)\n"
-                        + "# STATUS: DEX BINARY READY\n"
+                        + "# FORMAT: " + formatDesc + "\n"
+                        + "# STATUS: READY FOR DALVIK DISASSEMBLY\n"
                         + "# ========================================================\n"
                         + "# Press '" + getActionLabel() + "' to execute.\n";
                 if (etSourceCode != null) etSourceCode.setText(summary);
@@ -450,10 +456,20 @@ public abstract class BaseModuleActivity extends AppCompatActivity {
         }
     }
 
-    private boolean isDexBinary(String fileName, byte[] bytes) {
-        if (fileName != null && fileName.toLowerCase().endsWith(".dex")) return true;
+    protected boolean isBinaryBytecodeOrPackage(String fileName, byte[] bytes) {
+        if (fileName != null) {
+            String lower = fileName.toLowerCase();
+            if (lower.endsWith(".dex") || lower.endsWith(".class") || lower.endsWith(".apk") || lower.endsWith(".zip") || lower.endsWith(".jar")) {
+                return true;
+            }
+        }
         if (bytes != null && bytes.length >= 4) {
-            return bytes[0] == 'd' && bytes[1] == 'e' && bytes[2] == 'x' && bytes[3] == '\n';
+            // DEX: dex\n
+            if (bytes[0] == 'd' && bytes[1] == 'e' && bytes[2] == 'x' && bytes[3] == '\n') return true;
+            // JVM class: 0xCAFEBABE
+            if ((bytes[0] & 0xFF) == 0xCA && (bytes[1] & 0xFF) == 0xFE && (bytes[2] & 0xFF) == 0xBA && (bytes[3] & 0xFF) == 0xBE) return true;
+            // ZIP/APK/JAR: PK\003\004
+            if (bytes[0] == 0x50 && bytes[1] == 0x4B && bytes[2] == 0x03 && bytes[3] == 0x04) return true;
         }
         return false;
     }

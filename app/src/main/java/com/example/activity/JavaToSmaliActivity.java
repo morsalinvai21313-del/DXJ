@@ -66,6 +66,21 @@ public class JavaToSmaliActivity extends BaseModuleActivity {
 
     @Override
     protected void executeCompilation(String source, StringBuilder logs) {
+        if (importedDexFile != null && importedDexFile.exists()) {
+            // User opened a binary DEX, JVM class, or APK/ZIP file in JavaToSmali
+            com.example.compiler.DexDisassembler.DisassembleResult disRes =
+                    com.example.compiler.DexDisassembler.disassemble(this, importedDexFile);
+            mainHandler.post(() -> {
+                if (disRes.success) {
+                    onExecutionSuccess(logs, "[SYS:STATUS] >> EXTRACTED " + disRes.classCount + " CLASSES FROM ARTIFACT",
+                            disRes.smaliCode, null, importedDexFile);
+                } else {
+                    onExecutionError(logs, disRes.message);
+                }
+            });
+            return;
+        }
+
         JavaToSmaliCompiler.CompileResult res = JavaToSmaliCompiler.compile(this, source);
         mainHandler.post(() -> {
             if (res.success) {
